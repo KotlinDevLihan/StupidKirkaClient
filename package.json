@@ -1,0 +1,40 @@
+{
+  "name": "better-kirka-client",
+  "productName": "Better Kirka Client",
+  "version": "1.5.9",
+  "description": "a better kirka client",
+  "main": "src/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/42infi/better-kirka-client.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "build": "electron-builder build --win --publish never",
+    "deploy": "electron-builder build --win --publish always"
+  },
+  "dependencies": {
+    "electron-localshortcut": "^3.2.1",
+    "electron-squirrel-startup": "^1.0.0",
+    "electron-store": "^8.0.1",
+    "electron-updater": "^5.0.1"
+  },
+  "devDependencies": {
+    "electron": "^10.4.7",
+    "electron-builder": "^23.0.3"
+  },
+  "build": {
+    "appId": "better-kirka-client",
+    "directories": {
+      "buildResources": "resources",
+      "output": "release"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "publish": [
+        "github"
+      ]
+    }
+  }
+}
