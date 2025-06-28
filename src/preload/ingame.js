@@ -3,6 +3,83 @@ const fs = require('fs');
 const path = require('path');
 const Store = require('electron-store');
 
+// --- Your full-featured, standalone opening scripts ---
+const scriptOpenAllCards = `
+(async () => {
+  let git_base = "SheriffCarry";
+  let openingdelay = 2000;
+  let cards;
+  try {
+    cards = customcardlist;
+  } catch {
+    cards = [
+      { cardid: "723c4ba7-57b3-4ae4-b65e-75686fa77bf2", name: "Cold" },
+      { cardid: "723c4ba7-57b3-4ae4-b65e-75686fa77bf1", name: "Girls band" },
+      { cardid: "6281ed5a-663a-45e1-9772-962c95aa4605", name: "Party" },
+      { cardid: "9cc5bd60-806f-4818-a7d4-1ba9b32bd96c", name: "Soldiers" },
+      { cardid: "a5002827-97d1-4eb4-b893-af4047e0c77f", name: "Periodic" },
+    ];
+  }
+  let coloroutput = { PARANORMAL: "000000", MYTHICAL: "c20025", LEGENDARY: "feaa37", EPIC: "cd2afc", RARE: "43abde", COMMON: "47f2a0", DEFAULT: "ffffff" };
+  let translations_req = await fetch(\`https://raw.githubusercontent.com/\${git_base}/KirkaScripts/main/ConsoleScripts/microwaves.json\`);
+  let translations = await translations_req.json();
+  Object.keys(translations).forEach((item) => { translations[translations[item]] = item; });
+  function logCredits() { console.log("%cMade by carrysheriff/SheriffCarry discord: @carrysheriff", "color: #000000;background-color: #FFFFFF;font-size: large;"); console.log("If you only want a specific card to be opened, just delete the card from the array at the top of the script"); console.log(\`https://github.com/\${git_base}/KirkaScripts/blob/main/ConsoleScripts/OpenAllCards_live_updating.js this code is live updatin\`); }
+  async function fetchInventory() { let response = await fetch(\`https://api2.kirka.io/api/\${translations["inventory"]}\`, { headers: { accept: "application/json", authorization: \`Bearer \${localStorage.token}\` } }); return await response.json(); }
+  let bvl = [];
+  async function setBVL() { let response = await fetch("https://opensheet.elk.sh/1tzHjKpu2gYlHoCePjp6bFbKBGvZpwDjiRzT9ZUfNwbY/Alphabetical"); bvl = await response.json(); }
+  function rarity_backup(spreadsheet, namefield, rarityfield, skinname) { let found = false; let rarity = "Unknown-Rarity"; spreadsheet.forEach((listitem) => { if (listitem && listitem[namefield] && listitem[rarityfield]) { if (found == false && listitem[namefield] == skinname && Object.keys(coloroutput).includes(listitem[rarityfield].toUpperCase())) { found = true; rarity = listitem[rarityfield]; } } }); return rarity; }
+  async function openCard(cardid) { let bodyobj = {}; bodyobj[translations["id"]] = cardid; const response = await fetch(\`https://api2.kirka.io/api/\${translations["inventory"]}/\${translations["openCharacterCard"]}\`, { method: "POST", headers: { accept: "application/json", authorization: \`Bearer \${localStorage.token}\`, "content-type": "application/json;charset=UTF-8" }, body: JSON.stringify(bodyobj) }); let json = await response.json(); let returnobj = {}; Array.from(json).forEach((item) => { Object.keys(item).forEach((key) => { if (typeof item[key] == "boolean" && item[key] == true) { returnobj = item; } }); }); return returnobj; }
+  function ingameShowcase_messages(message, displaylength) { let elem = document.createElement("div"); elem.classList = "vue-notification-wrapper"; elem.style = "transition-timing-function: ease; transition-delay: 0s; transition-property: all;"; elem.innerHTML = \`<div data-v-3462d80a="" data-v-460e7e47="" class="alert-default"><span data-v-3462d80a="" class="text">\${message}</span></div>\`; elem.onclick = function () { try { elem.remove(); } catch {} }; document.getElementsByClassName("vue-notification-group")[0].children[0].appendChild(elem); setTimeout(() => { try { elem.remove(); } catch {} }, displaylength); }
+  function ingameShowcase_end() { let end_elem = document.createElement("div"); end_elem.classList = "vue-notification-wrapper"; end_elem.style = "transition-timing-function: ease; transition-delay: 0s; transition-property: all;"; end_elem.innerHTML = \`<div data-v-3462d80a="" data-v-460e7e47="" class="alert-default"><span data-v-3462d80a="" class="text">Finished running, check console for more details</span></div>\`; end_elem.onclick = function () { try { end_elem.remove(); } catch {} }; document.getElementsByClassName("vue-notification-group")[0].children[0].appendChild(end_elem); setTimeout(() => { try { end_elem.remove(); } catch {} }, 15000); }
+  function ingameShowcase(message, rarity, name) { rarity = translations[rarity]; if (rarity == undefined) { rarity = rarity_backup(bvl, "Skin Name", "Rarity", name); } const text = \`\${rarity} \${message} from: \${name}\`; const style = \`color: #\${coloroutput[rarity.toUpperCase()] || coloroutput.DEFAULT}\`; console.log(\`%c\${text}\`, style); const elem = document.createElement("div"); elem.classList.add("vue-notification-wrapper"); elem.style = "transition-timing-function: ease; transition-delay: 0s; transition-property: all;"; elem.innerHTML = \`<div data-v-3462d80a="" data-v-460e7e47="" class="alert-default"><span data-v-3462d80a="" class="text" style="color:#\${coloroutput[rarity.toUpperCase()] || coloroutput.DEFAULT}">\${text}</span></div>\`; elem.onclick = function () { try { elem.remove(); } catch {} }; document.getElementsByClassName("vue-notification-group")[0].children[0].appendChild(elem); setTimeout(() => { try { elem.remove(); } catch {} }, 5000); }
+  function confettiAnimation() { const duration = 15 * 1000; const animationEnd = Date.now() + duration; const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 }; function randomInRange(min, max) { return Math.random() * (max - min) + min; } const intervalconfetti = setInterval(() => { const timeLeft = animationEnd - Date.now(); if (timeLeft <= 0) { clearInterval(intervalconfetti); return; } const particleCount = 50 * (timeLeft / duration); confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }, zIndex: 99999 }); confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }, zIndex: 99999 }); }, 250); }
+  function updateCounter(counter, cardskipper) { counter = (counter + 1) % cards.length; while (cardskipper[counter] >= 2) { counter = (counter + 1) % cards.length; let check = cardskipper.reduce((acc, val) => acc + val, 0); if (check == cardskipper.length * 2) { counter = 0; break; } } return counter; }
+  function automatic_microwaves(inventory) { inventory.forEach((item) => { Object.keys(item).forEach((key) => { if (typeof item[key] == "object") { translations["item"] = key; } }); }); inventory.forEach((item) => { Object.keys(item[translations["item"]]).forEach((key) => { if ((typeof item[translations["item"]][key] == "string" && item[translations["item"]][key] == "Elizabeth") || item[translations["item"]][key] == "James") { translations["name"] = key; } }); }); inventory.forEach((item) => { Object.keys(item[translations["item"]]).forEach((key) => { if ((typeof item[translations["item"]][key] == "string" && item[translations["item"]][key] == "a1055b22-18ca-4cb9-8b39-e46bb0151185") || item[translations["item"]][key] == "6be53225-952a-45d7-a862-d69290e4348e") { translations["id"] = key; } }); }); }
+  function processCardskipper(cardskipper, inventory) { try { inventory.forEach((item) => { for (let i = 0; i < cards.length; i++) { if (item[translations["item"]][translations["id"]] == cards[i]["cardid"]) { cardskipper[i] = 0; } } }); return cardskipper; } catch { ingameShowcase_messages("Kirka microwave issue", 15000); return cardskipper; } }
+  function logSummary(itemsByRarity, colorMap) { console.log("%c--- Summary ---", "color: #FFFFFF; background-color: #000000; font-weight: bold; font-size: 1.2em; padding: 2px;"); const rarityOrder = [ "PARANORMAL", "MYTHICAL", "LEGENDARY", "EPIC", "RARE", "COMMON" ]; const sortedRarities = Object.keys(itemsByRarity).sort((a, b) => { const indexA = rarityOrder.indexOf(a); const indexB = rarityOrder.indexOf(b); if (indexA === -1 && indexB === -1) return 0; if (indexA === -1) return 1; if (indexB === -1) return -1; return indexA - indexB; }); for (const rarity of sortedRarities) { const items = itemsByRarity[rarity]; if (!items || items.length === 0) continue; const itemCounts = items.reduce((acc, item) => { acc[item] = (acc[item] || 0) + 1; return acc; }, {}); const itemsString = Object.entries(itemCounts).map(([name, count]) => \`\${name} x\${count}\`).join(", "); const totalCount = items.length; const color = colorMap[rarity] || colorMap.DEFAULT; const logText = \`\${totalCount}x \${rarity}: \${itemsString}\`; console.log(\`%c\${logText}\`, \`color: #\${color}; font-weight: bold;\`); } }
+  let cardskipper = new Array(cards.length).fill(2); try { cardskipper[0] = 0; } catch {}
+  (async () => { logCredits(); if (!cards[0]) { return; } await setBVL(); let inventory = await fetchInventory(); automatic_microwaves(inventory); cardskipper = processCardskipper(cardskipper, inventory); if (!document.getElementById("konfettijs")) { let script = document.createElement("script"); script.id = "konfettijs"; script.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"; document.head.appendChild(script); } let openedItems = {}; let counter = 0; let interval = setInterval(async () => { let cardresult = await openCard(cards[counter]["cardid"]); let resultName = cardresult[translations["name"]]; let resultRarity = cardresult[translations["rarity"]]; if (resultName) { ingameShowcase(resultName, resultRarity, cards[counter]["name"]); let translatedRarity = translations[resultRarity]; if (translatedRarity == undefined) { translatedRarity = rarity_backup( bvl, "Skin Name", "Rarity", resultName, ); } translatedRarity = translatedRarity.toUpperCase(); if (!openedItems[translatedRarity]) { openedItems[translatedRarity] = []; } openedItems[translatedRarity].push(resultName); if ( translations[resultRarity] == "MYTHICAL" || translations[resultRarity] == "PARANORMAL" ) { confettiAnimation(); } } else if (cardresult["code"] == 9910) { console.log("RATELIMIT"); } else { cardskipper[counter]++; console.log("DON'T WORRY ABOUT THE ERROR"); console.log("THE CHEST THAT IT TRIED TO OPEN IS NOT AVAILABLE ANYMORE"); console.log("IT WILL SKIP THAT ONE AFTER 2 FAILS"); } counter = updateCounter(counter, cardskipper); let check = cardskipper.reduce((acc, val) => acc + val, 0); if (check == cardskipper.length * 2) { clearInterval(interval); console.log("Finished Running"); ingameShowcase_end(); logSummary(openedItems, coloroutput); } }, openingdelay); })();
+})();
+`;
+
+const scriptOpenAllChests = `
+(async () => {
+  let git_base = "SheriffCarry";
+  let openingdelay = 2000;
+  let chests;
+  try {
+    chests = customchestlist;
+  } catch {
+    chests = [
+      { chestid: "077a4cf2-7b76-4624-8be6-4a7316cf5906", name: "Golden" },
+      { chestid: "ec230bdb-4b96-42c3-8bd0-65d204a153fc", name: "Ice" },
+      { chestid: "71182187-109c-40c9-94f6-22dbb60d70ee", name: "Wood" },
+    ];
+  }
+  let coloroutput = { PARANORMAL: "000000", MYTHICAL: "c20025", LEGENDARY: "feaa37", EPIC: "cd2afc", RARE: "43abde", COMMON: "47f2a0", DEFAULT: "ffffff" };
+  let translations_req = await fetch(\`https://raw.githubusercontent.com/\${git_base}/KirkaScripts/main/ConsoleScripts/microwaves.json\`);
+  let translations = await translations_req.json();
+  Object.keys(translations).forEach((item) => { translations[translations[item]] = item; });
+  function logCredits() { console.log("%cMade by carrysheriff/SheriffCarry discord: @carrysheriff", "color: #000000;background-color: #FFFFFF;font-size: large;"); console.log("If you only want a specific chest to be opened, just delete the chest from the array at the top of the script"); console.log(\`https://github.com/\${git_base}/KirkaScripts/blob/main/ConsoleScripts/OpenAllChests_live_updating.js this code is live updating\`); }
+  async function fetchInventory() { let response = await fetch(\`https://api2.kirka.io/api/\${translations["inventory"]}\`, { headers: { accept: "application/json", authorization: \`Bearer \${localStorage.token}\` } }); return await response.json(); }
+  let bvl = [];
+  async function setBVL() { let response = await fetch("https://opensheet.elk.sh/1tzHjKpu2gYlHoCePjp6bFbKBGvZpwDjiRzT9ZUfNwbY/Alphabetical"); bvl = await response.json(); }
+  function rarity_backup(spreadsheet, namefield, rarityfield, skinname) { let found = false; let rarity = "Unknown-Rarity"; spreadsheet.forEach((listitem) => { if (listitem && listitem[namefield] && listitem[rarityfield]) { if (found == false && listitem[namefield] == skinname && Object.keys(coloroutput).includes(listitem[rarityfield].toUpperCase())) { found = true; rarity = listitem[rarityfield]; } } }); return rarity; }
+  async function openChest(chestId) { let bodyobj = {}; bodyobj[translations["id"]] = chestId; const response = await fetch(\`https://api2.kirka.io/api/\${translations["inventory"]}/\${translations["openChest"]}\`, { method: "POST", headers: { accept: "application/json", authorization: \`Bearer \${localStorage.token}\`, "content-type": "application/json;charset=UTF-8" }, body: JSON.stringify(bodyobj) }); return await response.json(); }
+  function ingameShowcase_messages(message, displaylength) { let elem = document.createElement("div"); elem.classList = "vue-notification-wrapper"; elem.style = "transition-timing-function: ease; transition-delay: 0s; transition-property: all;"; elem.innerHTML = \`<div data-v-3462d80a="" data-v-460e7e47="" class="alert-default"><span data-v-3462d80a="" class="text">\${message}</span></div>\`; elem.onclick = function () { try { elem.remove(); } catch {} }; document.getElementsByClassName("vue-notification-group")[0].children[0].appendChild(elem); setTimeout(() => { try { elem.remove(); } catch {} }, displaylength); }
+  function ingameShowcase_end() { let end_elem = document.createElement("div"); end_elem.classList = "vue-notification-wrapper"; end_elem.style = "transition-timing-function: ease; transition-delay: 0s; transition-property: all;"; end_elem.innerHTML = \`<div data-v-3462d80a="" data-v-460e7e47="" class="alert-default"><span data-v-3462d80a="" class="text">Finished running, check console for more details</span></div>\`; end_elem.onclick = function () { try { end_elem.remove(); } catch {} }; document.getElementsByClassName("vue-notification-group")[0].children[0].appendChild(end_elem); setTimeout(() => { try { end_elem.remove(); } catch {} }, 15000); }
+  function ingameShowcase(message, rarity, name) { rarity = translations[rarity]; if (rarity == undefined) { rarity = rarity_backup(bvl, "Skin Name", "Rarity", name); } const text = \`\${rarity} \${message} from: \${name}\`; const style = \`color: #\${coloroutput[rarity.toUpperCase()] || coloroutput.DEFAULT}\`; console.log(\`%c\${text}\`, style); const elem = document.createElement("div"); elem.classList.add("vue-notification-wrapper"); elem.style = "transition-timing-function: ease; transition-delay: 0s; transition-property: all;"; elem.innerHTML = \`<div data-v-3462d80a="" data-v-460e7e47="" class="alert-default"><span data-v-3462d80a="" class="text" style="color:#\${coloroutput[rarity.toUpperCase()] || coloroutput.DEFAULT}">\${text}</span></div>\`; elem.onclick = function () { try { elem.remove(); } catch {} }; document.getElementsByClassName("vue-notification-group")[0].children[0].appendChild(elem); setTimeout(() => { try { elem.remove(); } catch {} }, 5000); }
+  function confettiAnimation() { const duration = 15 * 1000; const animationEnd = Date.now() + duration; const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 }; function randomInRange(min, max) { return Math.random() * (max - min) + min; } const intervalconfetti = setInterval(() => { const timeLeft = animationEnd - Date.now(); if (timeLeft <= 0) { clearInterval(intervalconfetti); return; } const particleCount = 50 * (timeLeft / duration); confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 }, zIndex: 99999 }); confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 }, zIndex: 99999 }); }, 250); }
+  function updateCounter(counter, chestskipper) { counter = (counter + 1) % chests.length; while (chestskipper[counter] >= 2) { counter = (counter + 1) % chests.length; let check = chestskipper.reduce((acc, val) => acc + val, 0); if (check == chestskipper.length * 2) { counter = 0; break; } } return counter; }
+  function automatic_microwaves(inventory) { inventory.forEach((item) => { Object.keys(item).forEach((key) => { if (typeof item[key] == "object") { translations["item"] = key; } }); }); inventory.forEach((item) => { Object.keys(item[translations["item"]]).forEach((key) => { if ((typeof item[translations["item"]][key] == "string" && item[translations["item"]][key] == "Elizabeth") || item[translations["item"]][key] == "James") { translations["name"] = key; } }); }); inventory.forEach((item) => { Object.keys(item[translations["item"]]).forEach((key) => { if ((typeof item[translations["item"]][key] == "string" && item[translations["item"]][key] == "a1055b22-18ca-4cb9-8b39-e46bb0151185") || item[translations["item"]][key] == "6be53225-952a-45d7-a862-d69290e4348e") { translations["id"] = key; } }); }); }
+  function processChestskipper(chestskipper, inventory) { try { inventory.forEach((item) => { for (let i = 0; i < chests.length; i++) { if (item[translations["item"]][translations["id"]] == chests[i]["chestid"]) { chestskipper[i] = 0; } } }); return chestskipper; } catch { ingameShowcase_messages("Kirka microwave issue", 15000); return chestskipper; } }
+  function logSummary(itemsByRarity, colorMap) { console.log("%c--- Summary ---", "color: #FFFFFF; background-color: #000000; font-weight: bold; font-size: 1.2em; padding: 2px;"); const rarityOrder = [ "PARANORMAL", "MYTHICAL", "LEGENDARY", "EPIC", "RARE", "COMMON" ]; const sortedRarities = Object.keys(itemsByRarity).sort((a, b) => { const indexA = rarityOrder.indexOf(a); const indexB = rarityOrder.indexOf(b); if (indexA === -1 && indexB === -1) return 0; if (indexA === -1) return 1; if (indexB === -1) return -1; return indexA - indexB; }); for (const rarity of sortedRarities) { const items = itemsByRarity[rarity]; if (!items || items.length === 0) continue; const itemCounts = items.reduce((acc, item) => { acc[item] = (acc[item] || 0) + 1; return acc; }, {}); const itemsString = Object.entries(itemCounts).map(([name, count]) => \`\${name} x\${count}\`).join(", "); const totalCount = items.length; const color = colorMap[rarity] || colorMap.DEFAULT; const logText = \`\${totalCount}x \${rarity}: \${itemsString}\`; console.log(\`%c\${logText}\`, \`color: #\${color}; font-weight: bold;\`); } }
+  let chestskipper = new Array(chests.length).fill(2); try { chestskipper[0] = 0; } catch {}
+  (async () => { logCredits(); if (!chests[0]) { return; } await setBVL(); let inventory = await fetchInventory(); automatic_microwaves(inventory); chestskipper = processChestskipper(chestskipper, inventory); if (!document.getElementById("konfettijs")) { let script = document.createElement("script"); script.id = "konfettijs"; script.src = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"; document.head.appendChild(script); } let openedItems = {}; let counter = 0; let interval = setInterval(async () => { let chestresult = await openChest(chests[counter]["chestid"]); let resultName = chestresult[translations["name"]]; let resultRarity = chestresult[translations["rarity"]]; if (resultName) { ingameShowcase(resultName, resultRarity, chests[counter]["name"]); let translatedRarity = translations[resultRarity]; if (translatedRarity == undefined) { translatedRarity = rarity_backup( bvl, "Skin Name", "Rarity", resultName, ); } translatedRarity = translatedRarity.toUpperCase(); if (!openedItems[translatedRarity]) { openedItems[translatedRarity] = []; } openedItems[translatedRarity].push(resultName); if ( translations[resultRarity] == "MYTHICAL" || translations[resultRarity] == "PARANORMAL" ) { confettiAnimation(); } } else if (chestresult["code"] == 9910) { console.log("RATELIMIT"); } else { chestskipper[counter]++; console.log("DON'T WORRY ABOUT THE ERROR"); console.log("THE CHEST THAT IT TRIED TO OPEN IS NOT AVAILABLE ANYMORE"); console.log("IT WILL SKIP THAT ONE AFTER 2 FAILS"); } counter = updateCounter(counter, chestskipper); let check = chestskipper.reduce((acc, val) => acc + val, 0); if (check == chestskipper.length * 2) { clearInterval(interval); console.log("Finished Running"); ingameShowcase_end(); logSummary(openedItems, coloroutput); } }, openingdelay); })();
+})();
+`;
+
 const settings = new Store();
 
 // --- Default settings ---
@@ -45,13 +122,15 @@ let autoOpenChests = !!settings.get('autoOpenChests');
 let menuVisible = false;
 let quickCssStyleElement;
 
-// --- Game object references for FPS ---
+// --- Game object references ---
 let renderer;
+let crosshair;
+
 Object.defineProperty(Object.prototype, "gameLogic", {
     set(value) {
         if (this.app && this.app.renderer) {
             renderer = this.app.renderer;
-            console.log("BetterKirkaClient: Game instance captured!");
+            console.log("BetterKirkaClient: Game renderer instance captured!");
             updateFpsCap();
         }
         this._gameLogic = value;
@@ -60,80 +139,37 @@ Object.defineProperty(Object.prototype, "gameLogic", {
     configurable: true
 });
 
-let crosshair;
+// --- Asynchronous, Standalone Script Execution ---
+let openAllInterval = null;
 
-// --- Automatic Openers ---
-let autoChestInterval = null;
-let autoCardInterval = null;
-let isOpening = false;
-
-function startAutoChestOpener() {
-    if (autoChestInterval) return;
-    console.log("Auto Chest Opener Activated.");
-    autoChestInterval = setInterval(async () => {
-        if (isOpening) return;
-
-        const continueButton = Array.from(document.querySelectorAll('button.button.green')).find(btn => btn.innerText.trim().toUpperCase() === 'CONTINUE');
-        if (continueButton) {
-            isOpening = true;
-            continueButton.click();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            isOpening = false;
-            return;
-        }
-        
-        const chestScreenTitle = Array.from(document.querySelectorAll('.title-text')).find(el => el.innerText.includes('Select a chest to open'));
-        if (chestScreenTitle) {
-            const openButton = Array.from(document.querySelectorAll('button.button.green')).find(btn => btn.innerText.trim().toUpperCase() === 'OPEN FOR FREE');
-            if (openButton) {
-                isOpening = true;
-                openButton.click();
-            }
-        }
-    }, 1000);
-}
-
-function stopAutoChestOpener() {
-    if (autoChestInterval) {
-        clearInterval(autoChestInterval);
-        autoChestInterval = null;
-        isOpening = false;
-        console.log("Auto Chest Opener Deactivated.");
+function runOpenAllScripts() {
+    // This function will be called repeatedly by the interval
+    if (autoOpenChests) {
+        console.log("Auto-opener: Checking for chests...");
+        try { new Function(scriptOpenAllChests)(); } 
+        catch (e) { console.error("Failed to execute auto-open chest script:", e); }
+    }
+    if (autoOpenCards) {
+        console.log("Auto-opener: Checking for cards...");
+        try { new Function(scriptOpenAllCards)(); } 
+        catch (e) { console.error("Failed to execute auto-open card script:", e); }
     }
 }
 
-function startAutoCardOpener() {
-    if (autoCardInterval) return;
-    console.log("Auto Card Opener Activated.");
-    autoCardInterval = setInterval(async () => {
-        if (isOpening) return;
-
-        const continueButton = Array.from(document.querySelectorAll('button.button.green')).find(btn => btn.innerText.trim().toUpperCase() === 'CONTINUE');
-        if (continueButton) {
-            isOpening = true;
-            continueButton.click();
-            await new Promise(resolve => setTimeout(resolve, 500));
-            isOpening = false;
-            return;
-        }
-
-        const cardScreen = document.querySelector('.card-collection');
-        if (cardScreen) {
-            const openButton = Array.from(document.querySelectorAll('button.button.green')).find(btn => btn.innerText.trim().toUpperCase() === 'OPEN FOR FREE');
-            if (openButton) {
-                isOpening = true;
-                openButton.click();
-            }
-        }
-    }, 1000);
+function startAsyncOpeners() {
+    if (openAllInterval) return; // Prevent multiple intervals
+    console.log("Starting asynchronous auto-opener interval (every 30 seconds).");
+    // Run it once immediately
+    runOpenAllScripts(); 
+    // Then run it on a timer
+    openAllInterval = setInterval(runOpenAllScripts, 30000); // Check every 30 seconds
 }
 
-function stopAutoCardOpener() {
-    if (autoCardInterval) {
-        clearInterval(autoCardInterval);
-        autoCardInterval = null;
-        isOpening = false;
-        console.log("Auto Card Opener Deactivated.");
+function stopAsyncOpeners() {
+    if (openAllInterval) {
+        clearInterval(openAllInterval);
+        openAllInterval = null;
+        console.log("Stopped asynchronous auto-opener interval.");
     }
 }
 
@@ -150,17 +186,14 @@ let respawnDetected = false;
 
 function startKdrScript() {
     if (kdrObserver) return;
-
     if (!kdrElement) {
         const kdrElementWrapper = document.createElement('div');
         kdrElementWrapper.innerHTML = '<div data-v-07689ebb="" class="kill bg text-1" id="kdrElem" style="color: white; padding-left: 15px;">K/D: 0.00</div>';
         kdrElement = kdrElementWrapper.firstChild;
     }
-
     function updateKDR() {
         const killsElem = document.querySelector('.kill-death .kill');
         let deathsElem = document.querySelector('.WwwNnMm.bg.text-1');
-
         if (!deathsElem) {
             const alternatives = ['[class*="WwwNnMm"][class*="bg"][class*="text-1"]', '.kill-death .death', '.death:not(.kill-death)', '[class*="death"]:not(.kill-death)', '.kill-death .icon-death + *', '.kill-death > *:last-child', '.scoreboard-self .value:nth-child(2)'];
             for (const selector of alternatives) {
@@ -168,10 +201,8 @@ function startKdrScript() {
                 if (deathsElem && deathsElem.textContent && deathsElem.textContent.trim()) break;
             }
         }
-
         const kdrDisplayElem = document.getElementById('kdrElem');
         if (!killsElem || !kdrDisplayElem) return;
-
         const kills = Number(killsElem.textContent || killsElem.innerText) || 0;
         let deaths = 0;
         if (deathsElem) {
@@ -190,7 +221,6 @@ function startKdrScript() {
                 }
             }
         }
-
         if (respawnDetected && deaths === lastDeaths) {
             const adjustedDeaths = lastDeaths + 1;
             updateKDRDisplay(kills, adjustedDeaths);
@@ -198,21 +228,18 @@ function startKdrScript() {
             respawnDetected = false;
             return;
         }
-
         if (kills !== lastKills || deaths !== lastDeaths) {
             lastKills = kills;
             lastDeaths = deaths;
             updateKDRDisplay(kills, deaths);
         }
     }
-
     function updateKDRDisplay(kills, deaths) {
         const kdrDisplayElem = document.getElementById('kdrElem');
         if (!kdrDisplayElem) return;
         let kdRatio = (deaths === 0) ? kills.toFixed(2) : (kills / deaths).toFixed(2);
         kdrDisplayElem.textContent = 'K/D: ' + kdRatio;
     }
-
     function detectDeath() {
         document.querySelectorAll('[class*="health"], [class*="hp"], .health-bar, .hp-bar').forEach(healthBar => {
             const healthMatch = (healthBar.textContent || healthBar.innerText).match(/(\d+)/);
@@ -225,12 +252,10 @@ function startKdrScript() {
                 lastHealth = currentHealth;
             }
         });
-
         if (document.querySelectorAll('[class*="respawn"], [class*="spawn"], .respawn-timer, .spawn-timer').length > 0) {
             respawnDetected = true;
             setTimeout(updateKDR, 100);
         }
-
         document.querySelectorAll('[class*="killed"], [class*="death"], .notification, .kill-feed').forEach(notification => {
             const text = notification.textContent || notification.innerText || '';
             if (text.includes('killed') || text.includes('eliminated') || text.includes('died')) {
@@ -239,7 +264,6 @@ function startKdrScript() {
             }
         });
     }
-
     function forceKDRCheck() {
         detectDeath();
         const killSelectors = ['.kill-death .kill', '.kill:not(.kill-death):not(#kdrElem)', '[class*="kill"]:not(.kill-death):not(#kdrElem)', '.scoreboard-self .value:nth-child(1)'];
@@ -275,7 +299,6 @@ function startKdrScript() {
             if (currentKills !== lastKills || currentDeaths !== lastDeaths) updateKDR();
         }
     }
-
     function hookGameScene() {
         const originalDefineProperty = Object.defineProperty;
         Object.defineProperty = function(obj, prop, descriptor) {
@@ -285,7 +308,6 @@ function startKdrScript() {
         const originalRAF = window.requestAnimationFrame;
         window.requestAnimationFrame = function(callback) { return originalRAF.call(this, function(time) { detectDeath(); return callback(time); }); };
     }
-
     kdrObserver = new MutationObserver((mutations) => {
         let shouldUpdate = false;
         const killDeathContainer = document.getElementsByClassName('kill-death')[0];
@@ -331,7 +353,6 @@ function stopKdrScript() {
     lastKills = 0; lastDeaths = 0; lastHealth = 100; respawnDetected = false; gameSceneHook = null;
 }
 
-// --- FINAL CORRECTED: Universal Permanent Scoreboard ---
 function enforceScoreboardStyle() {
     const ffaScoreboard = document.querySelector('.tab-info');
     const teamScoreboard = document.querySelector('.tab-team-info');
@@ -339,52 +360,28 @@ function enforceScoreboardStyle() {
     let scoreboardToPin = null;
     let isTeamBoard = false;
 
-    // The FFA-specific board ONLY exists in FFA modes. This is the most reliable check.
     if (ffaScoreboard) {
         scoreboardToPin = ffaScoreboard;
         isTeamBoard = false;
     } else if (teamScoreboard) {
-        // If the FFA board doesn't exist, it must be a team mode.
         scoreboardToPin = teamScoreboard;
         isTeamBoard = true;
     }
 
-    const baseStyle = `
-        display: flex !important; 
-        visibility: visible !important;
-        opacity: 1 !important;
-        position: fixed !important; 
-        top: 20px !important; 
-        right: 20px !important; 
-        left: auto !important; 
-        bottom: auto !important;
-        transform-origin: top right !important; 
-        z-index: 999 !important;
-        pointer-events: auto !important;
-        background-color: rgba(0, 0, 0, 0.2) !important;
-        border-radius: 5px;
-    `;
+    const baseStyle = `display: flex !important; visibility: visible !important; opacity: 1 !important; position: fixed !important; top: 20px !important; right: 20px !important; left: auto !important; bottom: auto !important; transform-origin: top right !important; z-index: 999 !important; pointer-events: auto !important; background-color: rgba(0, 0, 0, 0.2) !important; border-radius: 5px;`;
     
     let finalStyle;
     if (isTeamBoard) {
-        finalStyle = baseStyle + `
-            transform: scale(0.65) !important;
-            padding: 8px !important;
-        `;
+        finalStyle = baseStyle + `transform: scale(0.65) !important; padding: 8px !important;`;
     } else {
-        finalStyle = baseStyle + `
-            transform: scale(0.8) !important;
-            padding: 10px !important;
-        `;
+        finalStyle = baseStyle + `transform: scale(0.8) !important; padding: 10px !important;`;
     }
 
     if (permanentScoreboard && scoreboardToPin) {
-        // Only apply the style if it's different, to prevent constant repaints
         if (scoreboardToPin.style.cssText !== finalStyle) {
             scoreboardToPin.style.cssText = finalStyle;
         }
     } else {
-        // If the setting is off, ensure both are reset
         if (ffaScoreboard && ffaScoreboard.style.position === 'fixed') {
             ffaScoreboard.style.cssText = '';
         }
@@ -394,11 +391,8 @@ function enforceScoreboardStyle() {
     }
 }
 
-
-// --- Main UI Loop ---
 setInterval(() => {
     enforceScoreboardStyle();
-
     const gameInterface = document.querySelector('.game-interface');
     if (gameInterface) {
         let scoreElement = document.getElementById('bk-score-indicator');
@@ -417,7 +411,6 @@ setInterval(() => {
     }
 }, 250);
 
-// --- GUI Setup and Event Listeners ---
 document.addEventListener("DOMContentLoaded", () => {
     if (customCss) {
         let cssLinkElem = document.createElement("link");
@@ -493,18 +486,22 @@ document.addEventListener("DOMContentLoaded", () => {
     autoCardsCheckbox.checked = autoOpenCards;
     autoCardsCheckbox.addEventListener('change', (e) => {
         autoOpenCards = e.target.checked; settings.set('autoOpenCards', autoOpenCards);
-        if (autoOpenCards) startAutoCardOpener(); else stopAutoCardOpener();
+        if (autoOpenCards || autoOpenChests) startAsyncOpeners();
+        else stopAsyncOpeners();
     });
 
     const autoChestsCheckbox = document.getElementById("autoOpenChests");
     autoChestsCheckbox.checked = autoOpenChests;
     autoChestsCheckbox.addEventListener('change', (e) => {
         autoOpenChests = e.target.checked; settings.set('autoOpenChests', autoOpenChests);
-        if (autoOpenChests) startAutoChestOpener(); else stopAutoChestOpener();
+        if (autoOpenCards || autoOpenChests) startAsyncOpeners();
+        else stopAsyncOpeners();
     });
-
-    if (autoOpenCards) startAutoCardOpener();
-    if (autoOpenChests) startAutoChestOpener();
+    
+    // Initialize features
+    if (autoOpenCards || autoOpenChests) {
+        startAsyncOpeners();
+    }
     if (showKdrIndicator) startKdrScript();
 });
 
@@ -526,7 +523,9 @@ function updateFpsCap() {
 function animate() {
     window.requestAnimationFrame(animate);
     crosshair = crosshair || document.getElementById("crosshair-static");
-    if (crosshair && permCrosshair) crosshair.style.cssText = "visibility: visible !important; opacity: 1 !important; display: block !important;";
+    if (crosshair && permCrosshair) {
+        crosshair.style.cssText = "visibility: visible !important; opacity: 1 !important; display: block !important;";
+    }
 }
 
 animate();
