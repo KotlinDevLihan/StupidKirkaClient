@@ -1,7 +1,7 @@
 # Stupid Kirka Client
 
-Do F1 to open menu
-Do F12 to open inspector
+- Do F1 to open menu
+- Do F12 to open inspector
 
 ## Features
 - No ads
