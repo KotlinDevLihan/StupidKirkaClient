@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const Store = require('electron-store');
 
+// --- Script Definitions for GUI Options ---
+const scriptOpenAllCards = `function _0x49b2(){const _0x53323f=['forEach','317853JapNKf','137IOKTRP','classList','addedNodes','3749982iZQqoJ','button','6730725BZNChm','children','observe','style','appendChild','6281ed5a-663a-45e1-9772-962c95aa4605','Periodic','15890jYvsFW','createElement','dataset','openallbutton_','includes','472zdYYio','1134119kMUbhj','innerHTML','Cold','Soldiers','Girls\\x20band','723c4ba7-57b3-4ae4-b65e-75686fa77bf1','innerText','length','subject','Party','className','text','382650QPoTYQ','keys','34524ywXPWQ','a5002827-97d1-4eb4-b893-af4047e0c77f'];_0x49b2=function(){return _0x53323f;};return _0x49b2();}function _0x5b85(_0x4ae122,_0x5d9718){const _0x49b226=_0x49b2();return _0x5b85=function(_0x5b855f,_0x39e0c7){_0x5b855f=_0x5b855f-0x114;let _0x50e90b=_0x49b226[_0x5b855f];return _0x50e90b;},_0x5b85(_0x4ae122,_0x5d9718);}(function(_0x5ebdf7,_0xbd67a){const _0x27f9f7=_0x5b85,_0x3b6d2c=_0x5ebdf7();while(!![]){try{const _0x51fd99=-parseInt(_0x27f9f7(0x124))/0x1*(-parseInt(_0x27f9f7(0x130))/0x2)+-parseInt(_0x27f9f7(0x11e))/0x3+-parseInt(_0x27f9f7(0x120))/0x4+parseInt(_0x27f9f7(0x129))/0x5+parseInt(_0x27f9f7(0x127))/0x6+-parseInt(_0x27f9f7(0x136))/0x7+-parseInt(_0x27f9f7(0x135))/0x8*(parseInt(_0x27f9f7(0x123))/0x9);if(_0x51fd99===_0xbd67a)break;else _0x3b6d2c['push'](_0x3b6d2c['shift']());}catch(_0xf5ee36){_0x3b6d2c['push'](_0x3b6d2c['shift']());}}}(_0x49b2,0xa574a),(function(){const _0x54d27c=_0x5b85;let _0x35e591=[_0x54d27c(0x11b),'Cold',_0x54d27c(0x115),_0x54d27c(0x116),_0x54d27c(0x12f)],_0x22a4de=[{'cardid':_0x54d27c(0x12e),'name':_0x54d27c(0x11b)}],_0x5bdb18=[{'cardid':'723c4ba7-57b3-4ae4-b65e-75686fa77bf2','name':_0x54d27c(0x114)}],_0x4b86c4=[{'cardid':'9cc5bd60-806f-4818-a7d4-1ba9b32bd96c','name':_0x54d27c(0x115)}],_0xe5525a=[{'cardid':_0x54d27c(0x117),'name':_0x54d27c(0x116)}],_0x2af004=[{'cardid':_0x54d27c(0x121),'name':'Periodic'}];const _0xde5a58=new MutationObserver(_0x4369d0=>{const _0x1c49d0=_0x54d27c;for(const _0x870251 of _0x4369d0){if(_0x870251['addedNodes'][_0x1c49d0(0x119)]){if(_0x870251[_0x1c49d0(0x126)][0x0][_0x1c49d0(0x11c)][_0x1c49d0(0x134)](_0x1c49d0(0x11a))){let _0x569c81=_0x870251[_0x1c49d0(0x126)][0x0],_0xadd81c=_0x870251[_0x1c49d0(0x126)][0x0];if(_0x569c81[_0x1c49d0(0x12a)][0x2]){_0x569c81=_0x569c81[_0x1c49d0(0x12a)][0x2];if(_0x569c81['children'][0x0]){_0x569c81=_0x569c81[_0x1c49d0(0x12a)][0x0];if(_0x569c81[_0x1c49d0(0x118)]&&_0x35e591[_0x1c49d0(0x134)](_0x569c81['innerText'])){let _0x46dac6=_0x569c81[_0x1c49d0(0x118)],_0x503839=_0xadd81c[_0x1c49d0(0x12a)][0x3],_0x545255=document[_0x1c49d0(0x131)](_0x1c49d0(0x128));_0x545255[_0x1c49d0(0x137)]=_0x503839['innerHTML'],_0x545255['id']=_0x1c49d0(0x133)+_0x569c81[_0x1c49d0(0x118)],_0x545255[_0x1c49d0(0x12c)]='background-color:\\x20var(--red-5);\\x20--hover-color:var(--red-1);\\x20--top:var(--red-1);\\x20--bottom:var(--red-3);margin-top:2rem',_0x545255[_0x1c49d0(0x125)]=_0x503839[_0x1c49d0(0x125)],Object[_0x1c49d0(0x11f)](_0x503839[_0x1c49d0(0x132)])[_0x1c49d0(0x122)](_0x2fe6f=>{const _0x35fe5d=_0x1c49d0;_0x545255[_0x35fe5d(0x132)][_0x2fe6f]='';}),_0x545255[_0x1c49d0(0x12a)][0x1][_0x1c49d0(0x137)]='\\x20OPEN\\x20ALL\\x20';let _0x5dc4a1;if(_0x46dac6==_0x1c49d0(0x11b))_0x5dc4a1=_0x22a4de;else{if(_0x46dac6==_0x1c49d0(0x114))_0x5dc4a1=_0x5bdb18;else{if(_0x46dac6==_0x1c49d0(0x115))_0x5dc4a1=_0x4b86c4;else{if(_0x46dac6==_0x1c49d0(0x116))_0x5dc4a1=_0xe5525a;else _0x46dac6==_0x1c49d0(0x12f)&&(_0x5dc4a1=_0x2af004);}}}_0x545255['onclick']=function(){try{let _0x229b90,_0x48e1b1;async function _0xdab9a7(){const _0x271c4d=_0x5b85;_0x229b90=await fetch('https://raw.githubusercontent.com/SheriffCarry/KirkaScripts/main/ConsoleScripts/OpenAllCards_live_updating.js'),_0x48e1b1=await _0x229b90[_0x271c4d(0x11d)](),eval(_0x48e1b1);}_0xdab9a7();}catch{}},_0xadd81c[_0x1c49d0(0x12d)](_0x545255);}}}}}}});_0xde5a58[_0x54d27c(0x12b)](document,{'childList':!![],'subtree':!![]});}()));`;
+
 const settings = new Store();
 
 // --- Default settings ---
@@ -14,6 +17,8 @@ if (settings.get('quickCssCode') === undefined) settings.set('quickCssCode', '/*
 if (settings.get('showKdrIndicator') === undefined) settings.set('showKdrIndicator', true);
 if (settings.get('showScoreIndicator') === undefined) settings.set('showScoreIndicator', true);
 if (settings.get('permanentScoreboard') === undefined) settings.set('permanentScoreboard', true);
+if (settings.get('openAllCards') === undefined) settings.set('openAllCards', false);
+if (settings.get('autoOpenChests') === undefined) settings.set('autoOpenChests', false); // Changed setting name for clarity
 
 
 const documents = ipcRenderer.sendSync('docs');
@@ -37,6 +42,8 @@ let uncappedFps = !!settings.get('uncappedFps');
 let showKdrIndicator = !!settings.get('showKdrIndicator');
 let showScoreIndicator = !!settings.get('showScoreIndicator');
 let permanentScoreboard = !!settings.get('permanentScoreboard');
+let openAllCards = !!settings.get('openAllCards');
+let autoOpenChests = !!settings.get('autoOpenChests');
 
 let menuVisible = false;
 let quickCssStyleElement;
@@ -57,6 +64,58 @@ Object.defineProperty(Object.prototype, "gameLogic", {
 });
 
 let crosshair;
+
+// --- NEW: Automatic Chest Opener ---
+let autoChestInterval = null;
+let isOpening = false; // A lock to prevent multiple clicks at once
+
+function startAutoChestOpener() {
+    if (autoChestInterval) return; // Already running
+    console.log("Auto Chest Opener Activated.");
+
+    autoChestInterval = setInterval(async () => {
+        if (isOpening) return; // Don't do anything if an open action is already in progress
+
+        // Find the "Continue" button from a previous open, and click it first
+        const continueButton = Array.from(document.querySelectorAll('button.button.green'))
+                                  .find(btn => btn.innerText.trim().toUpperCase() === 'CONTINUE');
+        if (continueButton) {
+            console.log("Found 'Continue' button, clicking it.");
+            isOpening = true;
+            continueButton.click();
+            await new Promise(resolve => setTimeout(resolve, 500)); // Wait for animation
+            isOpening = false;
+            return; // End this check and let the next interval find the 'Open' button
+        }
+        
+        // Check if we are on the chest opening screen by looking for the title
+        const chestScreenTitle = Array.from(document.querySelectorAll('.title-text'))
+                                    .find(el => el.innerText.includes('Select a chest to open'));
+
+        if (chestScreenTitle) {
+            // Find the "Open for Free" button
+            const openButton = Array.from(document.querySelectorAll('button.button.green'))
+                                  .find(btn => btn.innerText.trim().toUpperCase() === 'OPEN FOR FREE');
+                                  
+            if (openButton) {
+                console.log("Found 'Open for Free' button, clicking it.");
+                isOpening = true;
+                openButton.click();
+                // The 'isOpening' lock will be released by the 'Continue' button logic
+            }
+        }
+    }, 1000); // Check every second
+}
+
+function stopAutoChestOpener() {
+    if (autoChestInterval) {
+        clearInterval(autoChestInterval);
+        autoChestInterval = null;
+        isOpening = false;
+        console.log("Auto Chest Opener Deactivated.");
+    }
+}
+
 
 // --- UPDATED KDR SCRIPT IMPLEMENTATION ---
 let kdrObserver = null; 
@@ -134,14 +193,8 @@ function startKdrScript() {
             }
         }
         
-        // Debug logging
-        console.log(`KDR Debug - Kills element:`, killsElem, `text: "${killsElem.textContent || killsElem.innerText}"`);
-        console.log(`KDR Debug - Deaths element (WwwNnMm.bg.text-1):`, deathsElem, `text: "${deathsElem ? (deathsElem.textContent || deathsElem.innerText) : 'null'}"`);
-        console.log(`KDR Debug - Parsed values: kills=${kills}, deaths=${deaths}`);
-        
         // Handle respawn detection death increment
         if (respawnDetected && deaths === lastDeaths) {
-            console.log('Respawn detected - incrementing deaths manually');
             const adjustedDeaths = lastDeaths + 1;
             updateKDRDisplay(kills, adjustedDeaths);
             lastDeaths = adjustedDeaths; // Update stored deaths
@@ -163,25 +216,16 @@ function startKdrScript() {
         
         let kdRatio;
         if (deaths === 0) {
-            // No deaths: show number of kills (1 kill, 0 deaths = 1.00)
             kdRatio = kills.toFixed(2);
         } else {
             const ratio = kills / deaths;
-            if (ratio === 1) {
-                // Equal kills and deaths = 0.00 (1 kill, 1 death = 0.00)
-                kdRatio = "0.00";
-            } else {
-                // Normal division (3 kills, 1 death = 3.00, 1 kill, 3 deaths = 0.33)
-                kdRatio = ratio.toFixed(2);
-            }
+            kdRatio = ratio.toFixed(2);
         }
         
         kdrDisplayElem.textContent = 'K/D: ' + kdRatio;
-        console.log(`KDR Updated: ${kills}/${deaths} = ${kdRatio}`);
     }
 
     function detectDeath() {
-        // Method 1: Health indicator detection
         const healthBars = document.querySelectorAll('[class*="health"], [class*="hp"], .health-bar, .hp-bar');
         healthBars.forEach(healthBar => {
             const healthText = healthBar.textContent || healthBar.innerText;
@@ -189,7 +233,6 @@ function startKdrScript() {
             if (healthMatch) {
                 const currentHealth = Number(healthMatch[1]);
                 if (lastHealth > 0 && currentHealth === 0) {
-                    console.log('Death detected via health drop to 0');
                     respawnDetected = true;
                     setTimeout(updateKDR, 100);
                 }
@@ -197,20 +240,16 @@ function startKdrScript() {
             }
         });
         
-        // Method 2: Respawn timer/button detection
         const respawnElements = document.querySelectorAll('[class*="respawn"], [class*="spawn"], .respawn-timer, .spawn-timer');
         if (respawnElements.length > 0) {
-            console.log('Death detected via respawn element appearance');
             respawnDetected = true;
             setTimeout(updateKDR, 100);
         }
         
-        // Method 3: Kill notification detection (when someone kills you)
         const killNotifications = document.querySelectorAll('[class*="killed"], [class*="death"], .notification, .kill-feed');
         killNotifications.forEach(notification => {
             const text = notification.textContent || notification.innerText || '';
             if (text.includes('killed') || text.includes('eliminated') || text.includes('died')) {
-                console.log('Death detected via kill notification');
                 respawnDetected = true;
                 setTimeout(updateKDR, 100);
             }
@@ -218,10 +257,8 @@ function startKdrScript() {
     }
 
     function forceKDRCheck() {
-        // Run death detection methods
         detectDeath();
         
-        // Try multiple selectors for kills and deaths but EXCLUDE our KDR element completely
         const killSelectors = [
             '.kill-death .kill',
             '.kill:not(.kill-death):not(#kdrElem)',
@@ -229,23 +266,20 @@ function startKdrScript() {
             '.scoreboard-self .value:nth-child(1)'
         ];
         
-        // Updated death selectors to prioritize the specific WwwNnMm class
         const deathSelectors = [
             '.WwwNnMm.bg.text-1',
             '[class*="WwwNnMm"][class*="bg"][class*="text-1"]',
-            '.scoreboard-self .value:nth-child(2)' // Fallback to scoreboard
+            '.scoreboard-self .value:nth-child(2)'
         ];
         
         let killsElem = null;
         let deathsElem = null;
         
-        // Find kills element
         for (const selector of killSelectors) {
             killsElem = document.querySelector(selector);
             if (killsElem && killsElem.textContent && killsElem.textContent.trim() && killsElem.id !== 'kdrElem') break;
         }
         
-        // Find deaths element using the updated selectors
         for (const selector of deathSelectors) {
             deathsElem = document.querySelector(selector);
             if (deathsElem && deathsElem.id !== 'kdrElem') {
@@ -260,18 +294,15 @@ function startKdrScript() {
             
             if (deathsElem && deathsElem.id !== 'kdrElem') {
                 const deathText = deathsElem.textContent || deathsElem.innerText || '';
-                // Skip if it's our own KDR element
                 if (!deathText.includes('K/D:')) {
                     currentDeaths = Number(deathText.trim()) || 0;
                 }
             }
             
-            // Fallback: extract from kill-death container, excluding our KDR text
             if (currentDeaths === 0) {
                 const killDeathContainer = document.querySelector('.kill-death');
                 if (killDeathContainer) {
                     const allText = killDeathContainer.textContent || killDeathContainer.innerText || '';
-                    // Remove our KDR text before parsing
                     const cleanText = allText.replace(/K\/D:\s*[\d.]+/g, '');
                     const numbers = cleanText.match(/\d+/g);
                     if (numbers && numbers.length >= 2) {
@@ -280,35 +311,25 @@ function startKdrScript() {
                 }
             }
             
-            console.log(`Force check values: ${currentKills}/${currentDeaths} (stored: ${lastKills}/${lastDeaths})`);
-            
-            // If values are different from what we last recorded, force an update
             if (currentKills !== lastKills || currentDeaths !== lastDeaths) {
-                console.log(`Force KDR check detected change: ${currentKills}/${currentDeaths} (was ${lastKills}/${lastDeaths})`);
                 updateKDR();
             }
-        } else {
-            console.log('Force check: No kills element found with any selector');
         }
     }
     
-    // Hook into game scene objects for low-level detection
     function hookGameScene() {
-        // Try to hook into Three.js scene objects
         const originalDefineProperty = Object.defineProperty;
         Object.defineProperty = function(obj, prop, descriptor) {
             if (prop === 'gameLogic' || prop === 'scene' || (descriptor && descriptor.value && descriptor.value.type === 'Scene')) {
-                console.log('Game scene object detected:', obj, prop);
                 gameSceneHook = descriptor.value;
             }
             return originalDefineProperty.call(this, obj, prop, descriptor);
         };
         
-        // Hook into requestAnimationFrame for game loop monitoring
         const originalRAF = window.requestAnimationFrame;
         window.requestAnimationFrame = function(callback) {
             return originalRAF.call(this, function(time) {
-                detectDeath(); // Run death detection in game loop
+                detectDeath();
                 return callback(time);
             });
         };
@@ -317,7 +338,6 @@ function startKdrScript() {
     kdrObserver = new MutationObserver((mutations) => {
         let shouldUpdate = false;
         
-        // Check if kill-death container exists and inject KDR element
         const killDeathContainer = document.getElementsByClassName('kill-death')[0];
         const isKdrElementInjected = document.getElementById('kdrElem');
 
@@ -326,7 +346,6 @@ function startKdrScript() {
             shouldUpdate = true;
         }
 
-        // Enhanced mutation detection for all death-related elements
         mutations.forEach(mutation => {
             if (mutation.type === 'childList') {
                 const checkNode = (node) => {
@@ -335,20 +354,18 @@ function startKdrScript() {
                         const classNameStr = typeof className === 'string' ? className : (className.toString ? className.toString() : '');
                         const textContent = node.textContent || '';
                         
-                        // Check for death-related classes or content, including the specific WwwNnMm class
                         if (classNameStr.includes('kill') || classNameStr.includes('death') || 
                             classNameStr.includes('respawn') || classNameStr.includes('spawn') ||
                             classNameStr.includes('health') || classNameStr.includes('hp') ||
-                            classNameStr.includes('WwwNnMm') || // Added specific class check
+                            classNameStr.includes('WwwNnMm') ||
                             textContent.includes('respawn') || textContent.includes('killed')) {
                             return true;
                         }
                         
-                        // Check children
                         if (node.querySelector && (
                             node.querySelector('.kill') || node.querySelector('.death') ||
                             node.querySelector('[class*="death"]') || node.querySelector('[class*="respawn"]') ||
-                            node.querySelector('.WwwNnMm.bg.text-1'))) { // Added specific class check
+                            node.querySelector('.WwwNnMm.bg.text-1'))) {
                             return true;
                         }
                     }
@@ -367,7 +384,7 @@ function startKdrScript() {
                     const classNameStr = typeof className === 'string' ? className : (className.toString ? className.toString() : '');
                     if (classNameStr.includes('kill') || classNameStr.includes('death') || 
                         classNameStr.includes('health') || classNameStr.includes('hp') ||
-                        classNameStr.includes('WwwNnMm')) { // Added specific class check
+                        classNameStr.includes('WwwNnMm')) {
                         shouldUpdate = true;
                         break;
                     }
@@ -391,13 +408,8 @@ function startKdrScript() {
     };
     kdrObserver.observe(document, config);
     
-    // Initialize game hooks
     hookGameScene();
-    
-    // Start polling interval for comprehensive checks
-    kdrUpdateInterval = setInterval(forceKDRCheck, 300); // More frequent checking
-    
-    // Initial update
+    kdrUpdateInterval = setInterval(forceKDRCheck, 300);
     setTimeout(updateKDR, 100);
 }
 
@@ -425,26 +437,10 @@ function stopKdrScript() {
 function enforceScoreboardStyle() {
     const scoreboard = document.querySelector('.tab-info');
     if (scoreboard && permanentScoreboard) {
-        // Force the style to override any game changes
-        const fixedStyle = `
-            display: block !important; 
-            visibility: visible !important;
-            opacity: 1 !important;
-            position: fixed !important; 
-            top: 20px !important; 
-            right: 20px !important; 
-            left: auto !important; 
-            transform: scale(0.8) !important; 
-            transform-origin: top right !important; 
-            z-index: 1000 !important;
-            pointer-events: auto !important;
-        `;
-        
+        const fixedStyle = `display: block !important; visibility: visible !important; opacity: 1 !important; position: fixed !important; top: 20px !important; right: 20px !important; left: auto !important; transform: scale(0.8) !important; transform-origin: top right !important; z-index: 1000 !important; pointer-events: auto !important;`;
         if (scoreboard.style.cssText !== fixedStyle) {
             scoreboard.style.cssText = fixedStyle;
         }
-        
-        // Also add CSS class override
         if (!scoreboard.classList.contains('bk-permanent-scoreboard')) {
             scoreboard.classList.add('bk-permanent-scoreboard');
         }
@@ -458,10 +454,8 @@ function enforceScoreboardStyle() {
 
 // --- OTHER UI ELEMENTS (in a lightweight interval for stability) ---
 setInterval(() => {
-    // Enhanced Permanent Scoreboard Logic
     enforceScoreboardStyle();
     
-    // Team Score Logic
     const gameInterface = document.querySelector('.game-interface');
     if (gameInterface) {
         let scoreElement = document.getElementById('bk-score-indicator');
@@ -469,7 +463,6 @@ setInterval(() => {
              if (!scoreElement) {
                 scoreElement = document.createElement('div');
                 scoreElement.id = 'bk-score-indicator';
-                // Adjusted top position to account for the removed element
                 scoreElement.style.cssText = 'position: absolute; top: 150px; left: 10px; color: white; background-color: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; font-family: "Montserrat", sans-serif; font-size: 14px; z-index: 1000;';
                 gameInterface.appendChild(scoreElement);
             }
@@ -479,7 +472,7 @@ setInterval(() => {
             scoreElement.remove();
         }
     }
-}, 100); // Increased frequency for better responsiveness
+}, 100);
 
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -490,24 +483,9 @@ document.addEventListener("DOMContentLoaded", () => {
         document.head.append(cssLinkElem);
     }
     
-    // Add CSS for permanent scoreboard override
     const permanentScoreboardCSS = document.createElement('style');
     permanentScoreboardCSS.id = 'permanent-scoreboard-css';
-    permanentScoreboardCSS.innerHTML = `
-        .bk-permanent-scoreboard {
-            display: block !important; 
-            visibility: visible !important;
-            opacity: 1 !important;
-            position: fixed !important; 
-            top: 20px !important; 
-            right: 20px !important; 
-            left: auto !important; 
-            transform: scale(0.8) !important; 
-            transform-origin: top right !important; 
-            z-index: 1000 !important;
-            pointer-events: auto !important;
-        }
-    `;
+    permanentScoreboardCSS.innerHTML = `.bk-permanent-scoreboard { display: block !important; visibility: visible !important; opacity: 1 !important; position: fixed !important; top: 20px !important; right: 20px !important; left: auto !important; transform: scale(0.8) !important; transform-origin: top right !important; z-index: 1000 !important; pointer-events: auto !important; }`;
     document.head.appendChild(permanentScoreboardCSS);
     
     quickCssStyleElement = document.createElement('style');
@@ -533,6 +511,10 @@ document.addEventListener("DOMContentLoaded", () => {
             <label class="setting-label">On-Screen Indicators</label>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Show K/D Ratio (Top)</label><div class="setting-control"><label class="switch"><input type="checkbox" id="showKdrIndicator"><span class="slider"></span></label></div></div>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Show Scoreboard (Left)</label><div class="setting-control"><label class="switch"><input type="checkbox" id="showScoreIndicator"><span class="slider"></span></label></div></div>
+            <div class="divider"></div>
+            <label class="setting-label">Automation Scripts</label>
+            <div class="setting"><label class="setting-label" style="color:#b9bbbe">"Open All Cards" Button (Reload to disable)</label><div class="setting-control"><label class="switch"><input type="checkbox" id="openAllCards"><span class="slider"></span></label></div></div>
+            <div class="setting"><label class="setting-label" style="color:#b9bbbe">Auto Open Chests</label><div class="setting-control"><label class="switch"><input type="checkbox" id="autoOpenChests"><span class="slider"></span></label></div></div>
         </div>
     </div>`;
     document.body.appendChild(gui);
@@ -573,9 +555,40 @@ document.addEventListener("DOMContentLoaded", () => {
     permanentScoreboardCheckbox.addEventListener('change', (e) => {
         permanentScoreboard = e.target.checked;
         settings.set('permanentScoreboard', permanentScoreboard);
-        enforceScoreboardStyle(); // Apply immediately
+        enforceScoreboardStyle();
     });
 
+    const allCardsCheckbox = document.getElementById("openAllCards");
+    allCardsCheckbox.checked = openAllCards;
+    allCardsCheckbox.addEventListener('change', (e) => {
+        openAllCards = e.target.checked;
+        settings.set('openAllCards', openAllCards);
+        if (openAllCards) {
+            runScript(scriptOpenAllCards);
+        }
+    });
+
+    // --- NEW: Logic for Auto Chest Opener Toggle ---
+    const autoChestsCheckbox = document.getElementById("autoOpenChests");
+    autoChestsCheckbox.checked = autoOpenChests;
+    autoChestsCheckbox.addEventListener('change', (e) => {
+        autoOpenChests = e.target.checked;
+        settings.set('autoOpenChests', autoOpenChests);
+        if (autoOpenChests) {
+            startAutoChestOpener();
+        } else {
+            stopAutoChestOpener();
+        }
+    });
+
+    // --- Initial script execution based on settings ---
+    if (openAllCards) {
+        runScript(scriptOpenAllCards);
+    }
+    if (autoOpenChests) {
+        startAutoChestOpener();
+    }
+    
     if (showKdrIndicator) {
         startKdrScript();
     }
@@ -585,21 +598,24 @@ document.addEventListener('keydown', (e) => {
     if (e.code === "F1") { e.preventDefault(); toggleGui(); }
 });
 
-// =================== THIS IS THE FIX ===================
 function toggleGui() {
     const gui = document.getElementById('gui');
     menuVisible = !menuVisible;
     gui.style.display = menuVisible ? 'block' : 'none';
     if (menuVisible) {
-        // When the menu is visible, unlock the pointer so the mouse cursor shows up. This is correct.
         document.exitPointerLock();
     }
-    // The "else" block that used to be here was removed.
-    // By not re-locking the pointer here, the cursor remains visible after you close the menu.
-    // The game will handle re-locking the pointer when you click back on the canvas.
 }
-// =======================================================
 
+function runScript(scriptCode) {
+    try {
+        const scriptElement = document.createElement('script');
+        scriptElement.textContent = scriptCode;
+        document.head.appendChild(scriptElement).remove();
+    } catch(e) {
+        console.error("Error executing dynamic script:", e);
+    }
+}
 
 function updateFpsCap() {
     if (renderer && renderer.options) {
