@@ -7,9 +7,15 @@ Store.initRenderer();
 
 const settings = new Store();
 
-app.commandLine.appendSwitch('disable-frame-rate-limit');
-app.commandLine.appendSwitch('disable-gpu-vsync');
-app.commandLine.appendSwitch('ignore-gpu-blacklist');
+// Initialize uncapped FPS setting
+if (settings.get('uncappedFps') === undefined) settings.set('uncappedFps', true);
+
+// Apply FPS settings based on user preference
+if (settings.get('uncappedFps')) {
+    app.commandLine.appendSwitch('disable-frame-rate-limit');
+    app.commandLine.appendSwitch('disable-gpu-vsync');
+    app.commandLine.appendSwitch('ignore-gpu-blacklist');
+}
 app.allowRendererProcessReuse = true;
 
 

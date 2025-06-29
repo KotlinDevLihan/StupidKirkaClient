@@ -1,12 +1,12 @@
 {
-  "name": "better-kirka-client",
-  "productName": "Better Kirka Client",
-  "version": "1.5.9",
-  "description": "a better kirka client",
+  "name": "stupid-kirka-client",
+  "productName": "Stupid Kirka Client",
+  "version": "0.1.0",
+  "description": "a better stupid kirka client",
   "main": "src/index.js",
   "repository": {
     "type": "git",
-    "url": "https://github.com/42infi/better-kirka-client.git"
+    "url": "https://github.com/KotlinDevLihan/StupidKirkaClient.git"
   },
   "scripts": {
     "start": "electron .",
@@ -25,16 +25,32 @@
     "electron-builder": "^23.0.3"
   },
   "build": {
-    "appId": "better-kirka-client",
+    "appId": "com.example.stupidkirka",
+    "productName": "Stupid Kirka Client",
     "directories": {
-      "buildResources": "resources",
-      "output": "release"
+      "output": "dist"
     },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
     "win": {
-      "icon": "build/icon.ico",
-      "publish": [
-        "github"
-      ]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "resources/OIP (2).ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "resources/OIP (2).ico",
+      "uninstallerIcon": "resources/OIP (2).ico"
     }
   }
 }

@@ -93,6 +93,12 @@ if (settings.get('showScoreIndicator') === undefined) settings.set('showScoreInd
 if (settings.get('permanentScoreboard') === undefined) settings.set('permanentScoreboard', true);
 if (settings.get('autoOpenCards') === undefined) settings.set('autoOpenCards', false);
 if (settings.get('autoOpenChests') === undefined) settings.set('autoOpenChests', false);
+if (settings.get('tradingNotifications') === undefined) settings.set('tradingNotifications', true);
+if (settings.get('showTradeValues') === undefined) settings.set('showTradeValues', true);
+if (settings.get('performanceMonitor') === undefined) settings.set('performanceMonitor', false);
+if (settings.get('inventoryPricing') === undefined) settings.set('inventoryPricing', true);
+if (settings.get('quickActions') === undefined) settings.set('quickActions', true);
+if (settings.get('customTheme') === undefined) settings.set('customTheme', 'default');
 
 
 const documents = ipcRenderer.sendSync('docs');
@@ -118,9 +124,24 @@ let showScoreIndicator = !!settings.get('showScoreIndicator');
 let permanentScoreboard = !!settings.get('permanentScoreboard');
 let autoOpenCards = !!settings.get('autoOpenCards');
 let autoOpenChests = !!settings.get('autoOpenChests');
+let tradingNotifications = !!settings.get('tradingNotifications');
+let showTradeValues = !!settings.get('showTradeValues');
+let performanceMonitor = !!settings.get('performanceMonitor');
+let inventoryPricing = !!settings.get('inventoryPricing');
+let quickActions = !!settings.get('quickActions');
+let customTheme = settings.get('customTheme');
 
 let menuVisible = false;
 let quickCssStyleElement;
+
+// --- Trading System Variables ---
+let tradingPriceData = {
+    yzzz: null,
+    bros: null,
+    fetched: false
+};
+let activeTrades = new Map();
+let tradeNotificationQueue = [];
 
 // --- Game object references ---
 let renderer;
@@ -171,6 +192,805 @@ function stopAsyncOpeners() {
         openAllInterval = null;
         console.log("Stopped asynchronous auto-opener interval.");
     }
+}
+
+// --- Trading System Implementation ---
+async function fetchTradingPrices() {
+    if (tradingPriceData.fetched) return;
+    
+    try {
+        console.log("Fetching trading price data...");
+        
+        // Fetch Yzzz price data
+        const yzzzResponse = await fetch('https://opensheet.elk.sh/1VqX9kwJx0WlHWKCJNGyIQe33APdUSXz0hEFk6x2-3bU/Sorted+View', {
+            headers: {
+                'accept': '*/*',
+                'accept-language': 'de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7',
+                'sec-fetch-site': 'cross-site'
+            },
+            method: 'GET'
+        });
+        tradingPriceData.yzzz = await yzzzResponse.json();
+        
+        // Fetch BROS price data
+        const brosResponse = await fetch('https://opensheet.elk.sh/1tzHjKpu2gYlHoCePjp6bFbKBGvZpwDjiRzT9ZUfNwbY/Alphabetical');
+        tradingPriceData.bros = await brosResponse.json();
+        
+        tradingPriceData.fetched = true;
+        console.log("Trading price data fetched successfully");
+    } catch (error) {
+        console.error("Failed to fetch trading price data:", error);
+    }
+}
+
+function getSkinValue(skinName, source = 'average') {
+    if (!tradingPriceData.fetched) return null;
+    
+    let value = 0;
+    let found = false;
+    
+    if (source === 'yzzz' && Array.isArray(tradingPriceData.yzzz)) {
+        tradingPriceData.yzzz.forEach(item => {
+            if (item.Name && item.Name.toLowerCase() === skinName.toLowerCase() && item['Base Value'] !== '-') {
+                const baseValue = item['Base Value'].split(' ')[0].replace(/,/g, '').replace(/\./g, '');
+                value = Number(baseValue);
+                found = true;
+            }
+        });
+    } else if (source === 'BROS' && Array.isArray(tradingPriceData.bros)) {
+        tradingPriceData.bros.forEach(item => {
+            if (item['Skin Name'] && item['Skin Name'].toLowerCase() === skinName.toLowerCase() && item.Price !== '-') {
+                const price = item.Price.split(' ')[0].split('?')[0].replace(/,/g, '').replace(/\./g, '');
+                value = Number(price);
+                found = true;
+            }
+        });
+    } else if (source === 'average') {
+        let yzzzValue = 0, brosValue = 0, count = 0;
+        
+        if (Array.isArray(tradingPriceData.yzzz)) {
+            tradingPriceData.yzzz.forEach(item => {
+                if (item.Name && item.Name.toLowerCase() === skinName.toLowerCase() && item['Base Value'] !== '-') {
+                    const baseValue = item['Base Value'].split(' ')[0].replace(/,/g, '').replace(/\./g, '');
+                    yzzzValue = Number(baseValue);
+                    count++;
+                }
+            });
+        }
+        
+        if (Array.isArray(tradingPriceData.bros)) {
+            tradingPriceData.bros.forEach(item => {
+                if (item['Skin Name'] && item['Skin Name'].toLowerCase() === skinName.toLowerCase() && item.Price !== '-') {
+                    const price = item.Price.split(' ')[0].split('?')[0].replace(/,/g, '').replace(/\./g, '');
+                    brosValue = Number(price);
+                    count++;
+                }
+            });
+        }
+        
+        if (count > 0) {
+            value = (yzzzValue + brosValue) / count;
+            found = true;
+        }
+    }
+    
+    return found ? value : null;
+}
+
+function showTradeNotification(tradeData) {
+    if (!tradingNotifications) return;
+    
+    const notification = document.createElement('div');
+    notification.className = 'trade-notification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        z-index: 10001;
+        min-width: 350px;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255,255,255,0.18);
+        font-family: "Montserrat", sans-serif;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    const tradeValue = calculateTradeValue(tradeData);
+    
+    notification.innerHTML = `
+        <style>
+            @keyframes slideIn {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            .trade-notification .trade-header {
+                display: flex;
+                align-items: center;
+                margin-bottom: 15px;
+                font-size: 16px;
+                font-weight: 600;
+            }
+            .trade-notification .trade-from {
+                color: #ffd700;
+                margin-left: 8px;
+            }
+            .trade-notification .trade-value {
+                background: rgba(255,255,255,0.2);
+                padding: 10px;
+                border-radius: 8px;
+                margin: 10px 0;
+                text-align: center;
+            }
+            .trade-notification .trade-buttons {
+                display: flex;
+                gap: 10px;
+                margin-top: 15px;
+            }
+            .trade-notification button {
+                flex: 1;
+                padding: 10px;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .trade-notification .accept-btn {
+                background: #4CAF50;
+                color: white;
+            }
+            .trade-notification .accept-btn:hover {
+                background: #45a049;
+                transform: translateY(-1px);
+            }
+            .trade-notification .deny-btn {
+                background: #f44336;
+                color: white;
+            }
+            .trade-notification .deny-btn:hover {
+                background: #da190b;
+                transform: translateY(-1px);
+            }
+            .trade-notification .view-btn {
+                background: #2196F3;
+                color: white;
+            }
+            .trade-notification .view-btn:hover {
+                background: #1976D2;
+                transform: translateY(-1px);
+            }
+        </style>
+        <div class="trade-header">
+            🤝 Trade Request from<span class="trade-from">${tradeData.fromUser || 'Unknown'}</span>
+        </div>
+        <div class="trade-value">
+            📊 Estimated Value: <strong>${tradeValue.toLocaleString()} credits</strong>
+        </div>
+        <div class="trade-buttons">
+            <button class="view-btn" onclick="viewTradeDetails('${tradeData.id}')">📋 View</button>
+            <button class="accept-btn" onclick="acceptTrade('${tradeData.id}')">✅ Accept</button>
+            <button class="deny-btn" onclick="denyTrade('${tradeData.id}')">❌ Deny</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 30 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 30000);
+    
+    // Store trade data
+    activeTrades.set(tradeData.id, tradeData);
+}
+
+function calculateTradeValue(tradeData) {
+    let totalValue = 0;
+    
+    if (tradeData.items && Array.isArray(tradeData.items)) {
+        tradeData.items.forEach(item => {
+            const value = getSkinValue(item.name);
+            if (value) totalValue += value;
+        });
+    }
+    
+    return totalValue;
+}
+
+function showTradeDetailsGUI(tradeId) {
+    const tradeData = activeTrades.get(tradeId);
+    if (!tradeData) return;
+    
+    const gui = document.createElement('div');
+    gui.className = 'trade-details-gui';
+    gui.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #2b2d31;
+        color: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 16px 64px rgba(0,0,0,0.5);
+        z-index: 10002;
+        min-width: 600px;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+        font-family: "Montserrat", sans-serif;
+        border: 2px solid #667eea;
+    `;
+    
+    const yourValue = calculateTradeValue({ items: tradeData.yourItems || [] });
+    const theirValue = calculateTradeValue({ items: tradeData.theirItems || [] });
+    
+    gui.innerHTML = `
+        <style>
+            .trade-details-gui .trade-header {
+                text-align: center;
+                margin-bottom: 25px;
+                padding-bottom: 15px;
+                border-bottom: 2px solid #667eea;
+            }
+            .trade-details-gui .trade-sides {
+                display: flex;
+                gap: 30px;
+                margin: 20px 0;
+            }
+            .trade-details-gui .trade-side {
+                flex: 1;
+                background: #36393f;
+                padding: 20px;
+                border-radius: 8px;
+                border: 2px solid #40444b;
+            }
+            .trade-details-gui .side-header {
+                text-align: center;
+                font-size: 18px;
+                font-weight: 600;
+                margin-bottom: 15px;
+                padding: 10px;
+                border-radius: 6px;
+            }
+            .trade-details-gui .your-side .side-header {
+                background: #4CAF50;
+            }
+            .trade-details-gui .their-side .side-header {
+                background: #2196F3;
+            }
+            .trade-details-gui .item-list {
+                min-height: 200px;
+                max-height: 300px;
+                overflow-y: auto;
+            }
+            .trade-details-gui .trade-item {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px;
+                margin: 8px 0;
+                background: #40444b;
+                border-radius: 6px;
+                border-left: 4px solid #667eea;
+            }
+            .trade-details-gui .item-name {
+                font-weight: 500;
+            }
+            .trade-details-gui .item-value {
+                color: #ffd700;
+                font-weight: 600;
+            }
+            .trade-details-gui .value-summary {
+                background: #36393f;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 20px 0;
+                text-align: center;
+            }
+            .trade-details-gui .action-buttons {
+                display: flex;
+                gap: 15px;
+                margin-top: 25px;
+            }
+            .trade-details-gui button {
+                flex: 1;
+                padding: 12px 20px;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+                font-size: 14px;
+            }
+            .trade-details-gui .accept-btn {
+                background: #4CAF50;
+                color: white;
+            }
+            .trade-details-gui .accept-btn:hover {
+                background: #45a049;
+                transform: translateY(-1px);
+            }
+            .trade-details-gui .deny-btn {
+                background: #f44336;
+                color: white;
+            }
+            .trade-details-gui .deny-btn:hover {
+                background: #da190b;
+                transform: translateY(-1px);
+            }
+            .trade-details-gui .close-btn {
+                background: #72767d;
+                color: white;
+            }
+            .trade-details-gui .close-btn:hover {
+                background: #5a6069;
+                transform: translateY(-1px);
+            }
+        </style>
+        <div class="trade-header">
+            <h2>🤝 Trade Details</h2>
+            <p>Trading with: <strong>${tradeData.fromUser || 'Unknown'}</strong></p>
+        </div>
+        
+        <div class="trade-sides">
+            <div class="trade-side your-side">
+                <div class="side-header">Your Items</div>
+                <div class="item-list">
+                    ${(tradeData.yourItems || []).map(item => {
+                        const value = getSkinValue(item.name);
+                        return `
+                            <div class="trade-item">
+                                <span class="item-name">${item.name}</span>
+                                <span class="item-value">${value ? value.toLocaleString() : 'N/A'}</span>
+                            </div>
+                        `;
+                    }).join('') || '<p style="text-align: center; color: #72767d; margin: 50px 0;">No items</p>'}
+                </div>
+            </div>
+            
+            <div class="trade-side their-side">
+                <div class="side-header">Their Items</div>
+                <div class="item-list">
+                    ${(tradeData.theirItems || []).map(item => {
+                        const value = getSkinValue(item.name);
+                        return `
+                            <div class="trade-item">
+                                <span class="item-name">${item.name}</span>
+                                <span class="item-value">${value ? value.toLocaleString() : 'N/A'}</span>
+                            </div>
+                        `;
+                    }).join('') || '<p style="text-align: center; color: #72767d; margin: 50px 0;">No items</p>'}
+                </div>
+            </div>
+        </div>
+        
+        <div class="value-summary">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Your Value: <strong style="color: #4CAF50;">${yourValue.toLocaleString()}</strong></span>
+                <span>Their Value: <strong style="color: #2196F3;">${theirValue.toLocaleString()}</strong></span>
+            </div>
+            <div style="font-size: 16px; font-weight: 600;">
+                Difference: <strong style="color: ${yourValue > theirValue ? '#4CAF50' : theirValue > yourValue ? '#f44336' : '#ffd700'}">
+                    ${Math.abs(yourValue - theirValue).toLocaleString()} 
+                    ${yourValue > theirValue ? '(You gain)' : theirValue > yourValue ? '(You lose)' : '(Equal)'}
+                </strong>
+            </div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="close-btn" onclick="closeTradeDetails()">Close</button>
+            <button class="deny-btn" onclick="denyTrade('${tradeId}'); closeTradeDetails();">❌ Deny Trade</button>
+            <button class="accept-btn" onclick="acceptTrade('${tradeId}'); closeTradeDetails();">✅ Accept Trade</button>
+        </div>
+    `;
+    
+    document.body.appendChild(gui);
+    
+    // Add overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'trade-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.7);
+        z-index: 10001;
+    `;
+    overlay.onclick = () => closeTradeDetails();
+    document.body.appendChild(overlay);
+    
+    // Store references for cleanup
+    gui.overlay = overlay;
+}
+
+// Global functions for trade actions
+window.viewTradeDetails = function(tradeId) {
+    // Remove existing notification
+    document.querySelectorAll('.trade-notification').forEach(n => n.remove());
+    showTradeDetailsGUI(tradeId);
+};
+
+window.acceptTrade = function(tradeId) {
+    console.log(`Accepting trade: ${tradeId}`);
+    // Remove notification
+    document.querySelectorAll('.trade-notification').forEach(n => n.remove());
+    activeTrades.delete(tradeId);
+    
+    // Here you would integrate with the actual game's trading API
+    showGameNotification("Trade accepted! ✅", 3000);
+};
+
+window.denyTrade = function(tradeId) {
+    console.log(`Denying trade: ${tradeId}`);
+    // Remove notification
+    document.querySelectorAll('.trade-notification').forEach(n => n.remove());
+    activeTrades.delete(tradeId);
+    
+    // Here you would integrate with the actual game's trading API
+    showGameNotification("Trade denied! ❌", 3000);
+};
+
+window.closeTradeDetails = function() {
+    const gui = document.querySelector('.trade-details-gui');
+    const overlay = document.querySelector('.trade-overlay');
+    if (gui) gui.remove();
+    if (overlay) overlay.remove();
+};
+
+function showGameNotification(message, duration = 5000) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 100px;
+        right: 20px;
+        background: rgba(0,0,0,0.9);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        z-index: 10000;
+        font-family: "Montserrat", sans-serif;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        animation: slideIn 0.3s ease-out;
+    `;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, duration);
+}
+
+// Monitor for trade requests (this would need to be integrated with the game's actual trade system)
+function initTradeMonitoring() {
+    if (!tradingNotifications) return;
+    
+    // This is a placeholder - you would need to hook into the actual game's trade request system
+    // For demonstration, we'll simulate trade requests
+    console.log("Trade monitoring initialized");
+    
+    // Example: Monitor for specific elements or API calls that indicate trade requests
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+            // Look for trade-related elements being added to the DOM
+            if (mutation.addedNodes) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1 && node.classList) {
+                        // Check for trade-related classes or content
+                        if (node.textContent && node.textContent.includes('wants to trade') || 
+                            node.classList.contains('trade-request') ||
+                            node.querySelector('[data-trade-id]')) {
+                            
+                            // Extract trade data from the element
+                            const tradeData = extractTradeData(node);
+                            if (tradeData) {
+                                showTradeNotification(tradeData);
+                            }
+                        }
+                    }
+                });
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+function extractTradeData(element) {
+    // This function would extract actual trade data from game elements
+    // For now, return a sample trade for demonstration
+    return {
+        id: Date.now().toString(),
+        fromUser: "TestUser",
+        yourItems: [
+            { name: "AK-47", rarity: "legendary" },
+            { name: "M4A4", rarity: "epic" }
+        ],
+        theirItems: [
+            { name: "AWP", rarity: "mythical" },
+            { name: "Glock-18", rarity: "rare" }
+        ]
+    };
+}
+
+// --- Performance Monitor Implementation ---
+let performanceInterval = null;
+let performanceElement = null;
+
+function startPerformanceMonitor() {
+    if (!performanceMonitor || performanceInterval) return;
+    
+    performanceElement = document.createElement('div');
+    performanceElement.id = 'performance-monitor';
+    performanceElement.style.cssText = `
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #00ff00;
+        padding: 10px;
+        border-radius: 5px;
+        font-family: "Courier New", monospace;
+        font-size: 12px;
+        z-index: 9999;
+        min-width: 150px;
+        border: 1px solid #00ff00;
+    `;
+    
+    document.body.appendChild(performanceElement);
+    
+    let frameCount = 0;
+    let lastTime = performance.now();
+    let fps = 0;
+    
+    function updatePerformance() {
+        const now = performance.now();
+        frameCount++;
+        
+        if (now - lastTime >= 1000) {
+            fps = Math.round(frameCount * 1000 / (now - lastTime));
+            frameCount = 0;
+            lastTime = now;
+        }
+        
+        const memUsage = performance.memory ? 
+            (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + ' MB' : 'N/A';
+        
+        performanceElement.innerHTML = `
+            <div style="color: #00ff41;">📊 PERFORMANCE</div>
+            <div>FPS: ${fps}</div>
+            <div>Memory: ${memUsage}</div>
+            <div>Ping: ${getPing()}ms</div>
+        `;
+        
+        requestAnimationFrame(updatePerformance);
+    }
+    
+    updatePerformance();
+}
+
+function stopPerformanceMonitor() {
+    if (performanceElement) {
+        performanceElement.remove();
+        performanceElement = null;
+    }
+}
+
+function getPing() {
+    // This would need to be integrated with the game's networking
+    // For now, return a simulated ping
+    return Math.floor(Math.random() * 50) + 20;
+}
+
+// --- Inventory Pricing Implementation ---
+function addInventoryPricing() {
+    if (!inventoryPricing || !showTradeValues) return;
+    
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+            if (mutation.addedNodes) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) {
+                        // Look for inventory items
+                        const inventoryItems = node.querySelectorAll && node.querySelectorAll('.item-container, .inventory-item, [class*="item"]');
+                        if (inventoryItems) {
+                            inventoryItems.forEach(item => addPriceToItem(item));
+                        }
+                        
+                        // Check if the node itself is an inventory item
+                        if (node.classList && (node.classList.contains('item-container') || 
+                            node.classList.contains('inventory-item') || 
+                            node.className.includes('item'))) {
+                            addPriceToItem(node);
+                        }
+                    }
+                });
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+function addPriceToItem(itemElement) {
+    if (!itemElement || itemElement.querySelector('.price-tag')) return;
+    
+    const itemName = extractItemName(itemElement);
+    if (!itemName) return;
+    
+    const value = getSkinValue(itemName);
+    if (!value) return;
+    
+    const priceTag = document.createElement('div');
+    priceTag.className = 'price-tag';
+    priceTag.style.cssText = `
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        background: rgba(0, 0, 0, 0.8);
+        color: #ffd700;
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: bold;
+        z-index: 1000;
+    `;
+    priceTag.textContent = value.toLocaleString();
+    
+    itemElement.style.position = 'relative';
+    itemElement.appendChild(priceTag);
+}
+
+function extractItemName(element) {
+    // Try to find item name from various possible selectors
+    const nameSelectors = [
+        '.item-name',
+        '.name',
+        '[data-name]',
+        '.tooltip-content'
+    ];
+    
+    for (const selector of nameSelectors) {
+        const nameElement = element.querySelector(selector);
+        if (nameElement) {
+            return nameElement.textContent || nameElement.dataset.name;
+        }
+    }
+    
+    // Fallback: look for text content that looks like an item name
+    const text = element.textContent || '';
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    
+    // Return the first non-empty line that doesn't look like a number or common UI text
+    for (const line of lines) {
+        if (line.length > 2 && !line.match(/^\d+$/) && 
+            !line.toLowerCase().includes('rarity') && 
+            !line.toLowerCase().includes('level')) {
+            return line;
+        }
+    }
+    
+    return null;
+}
+
+// --- Quick Actions Implementation ---
+function initQuickActions() {
+    if (!quickActions) return;
+    
+    document.addEventListener('keydown', (e) => {
+        // Only process if not in an input field
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        
+        switch(e.code) {
+            case 'F2':
+                e.preventDefault();
+                togglePerformanceMonitor();
+                break;
+            case 'F3':
+                e.preventDefault();
+                simulateTradeRequest(); // For testing
+                break;
+            case 'F5':
+                e.preventDefault();
+                location.reload();
+                break;
+            case 'F8':
+                e.preventDefault();
+                copyGameUrl();
+                break;
+        }
+    });
+    
+    console.log("Quick Actions initialized:");
+    console.log("F2 - Toggle Performance Monitor");
+    console.log("F3 - Simulate Trade Request (Demo)");
+    console.log("F5 - Refresh Game");
+    console.log("F8 - Copy Current URL");
+}
+
+function togglePerformanceMonitor() {
+    performanceMonitor = !performanceMonitor;
+    settings.set('performanceMonitor', performanceMonitor);
+    
+    if (performanceMonitor) {
+        startPerformanceMonitor();
+        showGameNotification("Performance Monitor ON", 2000);
+    } else {
+        stopPerformanceMonitor();
+        showGameNotification("Performance Monitor OFF", 2000);
+    }
+}
+
+function simulateTradeRequest() {
+    const sampleTrade = {
+        id: Date.now().toString(),
+        fromUser: "DemoPlayer",
+        yourItems: [
+            { name: "AK-47 Redline", rarity: "legendary" },
+            { name: "M4A4 Dragon King", rarity: "epic" }
+        ],
+        theirItems: [
+            { name: "AWP Lightning Strike", rarity: "mythical" },
+            { name: "Glock-18 Water Elemental", rarity: "rare" }
+        ]
+    };
+    showTradeNotification(sampleTrade);
+}
+
+function copyGameUrl() {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+        showGameNotification("URL copied to clipboard!", 2000);
+    }).catch(() => {
+        showGameNotification("Failed to copy URL", 2000);
+    });
+}
+
+// --- Theme Customization ---
+function applyCustomTheme() {
+    const themes = {
+        'default': '',
+        'dark-blue': `
+            body { filter: hue-rotate(200deg) saturate(1.2); }
+            .game-interface { background: rgba(0, 20, 40, 0.3) !important; }
+        `,
+        'purple': `
+            body { filter: hue-rotate(270deg) saturate(1.1); }
+            .game-interface { background: rgba(40, 0, 40, 0.3) !important; }
+        `,
+        'green': `
+            body { filter: hue-rotate(120deg) saturate(1.1); }
+            .game-interface { background: rgba(0, 40, 20, 0.3) !important; }
+        `,
+        'red': `
+            body { filter: hue-rotate(0deg) saturate(1.3); }
+            .game-interface { background: rgba(40, 0, 0, 0.3) !important; }
+        `
+    };
+    
+    let themeStyle = document.getElementById('custom-theme-style');
+    if (!themeStyle) {
+        themeStyle = document.createElement('style');
+        themeStyle.id = 'custom-theme-style';
+        document.head.appendChild(themeStyle);
+    }
+    
+    themeStyle.innerHTML = themes[customTheme] || '';
 }
 
 
@@ -443,6 +1263,16 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Show K/D Ratio (Top)</label><div class="setting-control"><label class="switch"><input type="checkbox" id="showKdrIndicator"><span class="slider"></span></label></div></div>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Show Scoreboard (Left)</label><div class="setting-control"><label class="switch"><input type="checkbox" id="showScoreIndicator"><span class="slider"></span></label></div></div>
             <div class="divider"></div>
+            <label class="setting-label">Trading System</label>
+            <div class="setting"><label class="setting-label" style="color:#b9bbbe">Trade Notifications</label><div class="setting-control"><label class="switch"><input type="checkbox" id="tradingNotifications"><span class="slider"></span></label></div></div>
+            <div class="setting"><label class="setting-label" style="color:#b9bbbe">Show Trade Values</label><div class="setting-control"><label class="switch"><input type="checkbox" id="showTradeValues"><span class="slider"></span></label></div></div>
+            <div class="divider"></div>
+            <label class="setting-label">Enhanced Features</label>
+            <div class="setting"><label class="setting-label" style="color:#b9bbbe">Performance Monitor</label><div class="setting-control"><label class="switch"><input type="checkbox" id="performanceMonitor"><span class="slider"></span></label></div></div>
+            <div class="setting"><label class="setting-label" style="color:#b9bbbe">Inventory Pricing</label><div class="setting-control"><label class="switch"><input type="checkbox" id="inventoryPricing"><span class="slider"></span></label></div></div>
+            <div class="setting"><label class="setting-label" style="color:#b9bbbe">Quick Actions (F2-F8)</label><div class="setting-control"><label class="switch"><input type="checkbox" id="quickActions"><span class="slider"></span></label></div></div>
+            <div class="setting"><label class="setting-label">Custom Theme</label><div class="setting-control"><select id="customTheme" style="background-color:#1e1f22;border:1px solid #111;color:#fff;padding:8px;border-radius:3px;width:150px;"><option value="default">Default</option><option value="dark-blue">Dark Blue</option><option value="purple">Purple</option><option value="green">Green</option><option value="red">Red</option></select></div></div>
+            <div class="divider"></div>
             <label class="setting-label">Automation Scripts</label>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Auto Open Cards</label><div class="setting-control"><label class="switch"><input type="checkbox" id="autoOpenCards"><span class="slider"></span></label></div></div>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Auto Open Chests</label><div class="setting-control"><label class="switch"><input type="checkbox" id="autoOpenChests"><span class="slider"></span></label></div></div>
@@ -497,12 +1327,70 @@ document.addEventListener("DOMContentLoaded", () => {
         if (autoOpenCards || autoOpenChests) startAsyncOpeners();
         else stopAsyncOpeners();
     });
+
+    const tradingNotificationsCheckbox = document.getElementById("tradingNotifications");
+    tradingNotificationsCheckbox.checked = tradingNotifications;
+    tradingNotificationsCheckbox.addEventListener('change', (e) => {
+        tradingNotifications = e.target.checked; 
+        settings.set('tradingNotifications', tradingNotifications);
+        if (tradingNotifications) initTradeMonitoring();
+    });
+
+    const showTradeValuesCheckbox = document.getElementById("showTradeValues");
+    showTradeValuesCheckbox.checked = showTradeValues;
+    showTradeValuesCheckbox.addEventListener('change', (e) => {
+        showTradeValues = e.target.checked; 
+        settings.set('showTradeValues', showTradeValues);
+    });
+
+    const performanceMonitorCheckbox = document.getElementById("performanceMonitor");
+    performanceMonitorCheckbox.checked = performanceMonitor;
+    performanceMonitorCheckbox.addEventListener('change', (e) => {
+        performanceMonitor = e.target.checked; 
+        settings.set('performanceMonitor', performanceMonitor);
+        if (performanceMonitor) startPerformanceMonitor();
+        else stopPerformanceMonitor();
+    });
+
+    const inventoryPricingCheckbox = document.getElementById("inventoryPricing");
+    inventoryPricingCheckbox.checked = inventoryPricing;
+    inventoryPricingCheckbox.addEventListener('change', (e) => {
+        inventoryPricing = e.target.checked; 
+        settings.set('inventoryPricing', inventoryPricing);
+        if (inventoryPricing) addInventoryPricing();
+    });
+
+    const quickActionsCheckbox = document.getElementById("quickActions");
+    quickActionsCheckbox.checked = quickActions;
+    quickActionsCheckbox.addEventListener('change', (e) => {
+        quickActions = e.target.checked; 
+        settings.set('quickActions', quickActions);
+        if (quickActions) initQuickActions();
+    });
+
+    const customThemeSelect = document.getElementById("customTheme");
+    customThemeSelect.value = customTheme;
+    customThemeSelect.addEventListener('change', (e) => {
+        customTheme = e.target.value; 
+        settings.set('customTheme', customTheme);
+        applyCustomTheme();
+    });
     
     // Initialize features
     if (autoOpenCards || autoOpenChests) {
         startAsyncOpeners();
     }
     if (showKdrIndicator) startKdrScript();
+    if (performanceMonitor) startPerformanceMonitor();
+    if (inventoryPricing) addInventoryPricing();
+    if (quickActions) initQuickActions();
+    
+    // Initialize trading system
+    fetchTradingPrices();
+    if (tradingNotifications) initTradeMonitoring();
+    
+    // Apply theme
+    applyCustomTheme();
 });
 
 document.addEventListener('keydown', (e) => {
