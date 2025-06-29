@@ -11,7 +11,4 @@
 - Auto Open Chests/Cards
 
 # Credit to 42ifni and boden for BKC Template
-
-## Installation Guide
-
-https://www.youtube.com/watch?v=iqw45gCTsV0
+# Credit to SheriffCarry for scripts
