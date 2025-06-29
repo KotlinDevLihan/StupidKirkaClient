@@ -1,7 +1,7 @@
 {
   "name": "stupid-kirka-client",
   "productName": "Stupid Kirka Client",
-  "version": "0.1.0",
+  "version": "0.2.5",
   "description": "a better stupid kirka client",
   "main": "src/index.js",
   "repository": {
