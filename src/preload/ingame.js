@@ -98,7 +98,6 @@ if (settings.get('showTradeValues') === undefined) settings.set('showTradeValues
 if (settings.get('performanceMonitor') === undefined) settings.set('performanceMonitor', false);
 if (settings.get('inventoryPricing') === undefined) settings.set('inventoryPricing', true);
 if (settings.get('quickActions') === undefined) settings.set('quickActions', true);
-if (settings.get('customTheme') === undefined) settings.set('customTheme', 'default');
 
 
 const documents = ipcRenderer.sendSync('docs');
@@ -129,7 +128,6 @@ let showTradeValues = !!settings.get('showTradeValues');
 let performanceMonitor = !!settings.get('performanceMonitor');
 let inventoryPricing = !!settings.get('inventoryPricing');
 let quickActions = !!settings.get('quickActions');
-let customTheme = settings.get('customTheme');
 
 let menuVisible = false;
 let quickCssStyleElement;
@@ -961,37 +959,6 @@ function copyGameUrl() {
     });
 }
 
-// --- Theme Customization ---
-function applyCustomTheme() {
-    const themes = {
-        'default': '',
-        'dark-blue': `
-            body { filter: hue-rotate(200deg) saturate(1.2); }
-            .game-interface { background: rgba(0, 20, 40, 0.3) !important; }
-        `,
-        'purple': `
-            body { filter: hue-rotate(270deg) saturate(1.1); }
-            .game-interface { background: rgba(40, 0, 40, 0.3) !important; }
-        `,
-        'green': `
-            body { filter: hue-rotate(120deg) saturate(1.1); }
-            .game-interface { background: rgba(0, 40, 20, 0.3) !important; }
-        `,
-        'red': `
-            body { filter: hue-rotate(0deg) saturate(1.3); }
-            .game-interface { background: rgba(40, 0, 0, 0.3) !important; }
-        `
-    };
-    
-    let themeStyle = document.getElementById('custom-theme-style');
-    if (!themeStyle) {
-        themeStyle = document.createElement('style');
-        themeStyle.id = 'custom-theme-style';
-        document.head.appendChild(themeStyle);
-    }
-    
-    themeStyle.innerHTML = themes[customTheme] || '';
-}
 
 
 // --- KDR Script Implementation ---
@@ -1271,7 +1238,6 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Performance Monitor</label><div class="setting-control"><label class="switch"><input type="checkbox" id="performanceMonitor"><span class="slider"></span></label></div></div>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Inventory Pricing</label><div class="setting-control"><label class="switch"><input type="checkbox" id="inventoryPricing"><span class="slider"></span></label></div></div>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Quick Actions (F2-F8)</label><div class="setting-control"><label class="switch"><input type="checkbox" id="quickActions"><span class="slider"></span></label></div></div>
-            <div class="setting"><label class="setting-label">Custom Theme</label><div class="setting-control"><select id="customTheme" style="background-color:#1e1f22;border:1px solid #111;color:#fff;padding:8px;border-radius:3px;width:150px;"><option value="default">Default</option><option value="dark-blue">Dark Blue</option><option value="purple">Purple</option><option value="green">Green</option><option value="red">Red</option></select></div></div>
             <div class="divider"></div>
             <label class="setting-label">Automation Scripts</label>
             <div class="setting"><label class="setting-label" style="color:#b9bbbe">Auto Open Cards</label><div class="setting-control"><label class="switch"><input type="checkbox" id="autoOpenCards"><span class="slider"></span></label></div></div>
@@ -1368,13 +1334,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (quickActions) initQuickActions();
     });
 
-    const customThemeSelect = document.getElementById("customTheme");
-    customThemeSelect.value = customTheme;
-    customThemeSelect.addEventListener('change', (e) => {
-        customTheme = e.target.value; 
-        settings.set('customTheme', customTheme);
-        applyCustomTheme();
-    });
     
     // Initialize features
     if (autoOpenCards || autoOpenChests) {
@@ -1389,8 +1348,6 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchTradingPrices();
     if (tradingNotifications) initTradeMonitoring();
     
-    // Apply theme
-    applyCustomTheme();
 });
 
 document.addEventListener('keydown', (e) => {
