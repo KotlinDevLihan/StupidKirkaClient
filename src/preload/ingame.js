@@ -902,7 +902,7 @@ function initQuickActions() {
                 break;
             case 'F3':
                 e.preventDefault();
-                simulateTradeRequest(); // For testing
+
                 break;
             case 'F5':
                 e.preventDefault();
