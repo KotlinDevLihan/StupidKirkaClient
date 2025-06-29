@@ -275,425 +275,77 @@ function getSkinValue(skinName, source = 'average') {
     return found ? value : null;
 }
 
-function showTradeNotification(tradeData) {
-    if (!tradingNotifications) return;
+// --- Kirka.io Trading System Implementation ---
+// This code should be integrated into your existing paste.txt file
+
+// Trading System Variables (add these to your existing variables)
+let globalChatObserver = null;
+let tradeCommandRegex = /\/trade\s+offer\s+(?:(\S+)\s+)?my:\[([^\]]+)\]\s+your:\[([^\]]+)\]/i;
+let tradeAcceptRegex = /\/trade\s+accept\s+(\d+)/i;
+let activeTradeOffers = new Map();
+let tradeIdCounter = 1;
+let globalChatSocket = null;
+let myKirkaId = null;
+
+// Initialize the trading system
+function initKirkaTradingSystem() {
+    console.log("Initializing Kirka.io Trading System...");
     
-    const notification = document.createElement('div');
-    notification.className = 'trade-notification';
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-        z-index: 10001;
-        min-width: 350px;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255,255,255,0.18);
-        font-family: "Montserrat", sans-serif;
-        animation: slideIn 0.3s ease-out;
-    `;
+    // Get the user's Kirka ID from localStorage or profile
+    myKirkaId = localStorage.getItem('kirkaUserId') || extractMyKirkaId();
     
-    const tradeValue = calculateTradeValue(tradeData);
+    // Start monitoring for trade-related elements
+    monitorGlobalChat();
+    monitorWebSocketMessages();
     
-    notification.innerHTML = `
-        <style>
-            @keyframes slideIn {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            .trade-notification .trade-header {
-                display: flex;
-                align-items: center;
-                margin-bottom: 15px;
-                font-size: 16px;
-                font-weight: 600;
-            }
-            .trade-notification .trade-from {
-                color: #ffd700;
-                margin-left: 8px;
-            }
-            .trade-notification .trade-value {
-                background: rgba(255,255,255,0.2);
-                padding: 10px;
-                border-radius: 8px;
-                margin: 10px 0;
-                text-align: center;
-            }
-            .trade-notification .trade-buttons {
-                display: flex;
-                gap: 10px;
-                margin-top: 15px;
-            }
-            .trade-notification button {
-                flex: 1;
-                padding: 10px;
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-            .trade-notification .accept-btn {
-                background: #4CAF50;
-                color: white;
-            }
-            .trade-notification .accept-btn:hover {
-                background: #45a049;
-                transform: translateY(-1px);
-            }
-            .trade-notification .deny-btn {
-                background: #f44336;
-                color: white;
-            }
-            .trade-notification .deny-btn:hover {
-                background: #da190b;
-                transform: translateY(-1px);
-            }
-            .trade-notification .view-btn {
-                background: #2196F3;
-                color: white;
-            }
-            .trade-notification .view-btn:hover {
-                background: #1976D2;
-                transform: translateY(-1px);
-            }
-        </style>
-        <div class="trade-header">
-            🤝 Trade Request from<span class="trade-from">${tradeData.fromUser || 'Unknown'}</span>
-        </div>
-        <div class="trade-value">
-            📊 Estimated Value: <strong>${tradeValue.toLocaleString()} credits</strong>
-        </div>
-        <div class="trade-buttons">
-            <button class="view-btn" onclick="viewTradeDetails('${tradeData.id}')">📋 View</button>
-            <button class="accept-btn" onclick="acceptTrade('${tradeData.id}')">✅ Accept</button>
-            <button class="deny-btn" onclick="denyTrade('${tradeData.id}')">❌ Deny</button>
-        </div>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto-remove after 30 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 30000);
-    
-    // Store trade data
-    activeTrades.set(tradeData.id, tradeData);
+    // Fetch trading prices if not already fetched
+    if (!tradingPriceData.fetched) {
+        fetchTradingPrices();
+    }
 }
 
-function calculateTradeValue(tradeData) {
-    let totalValue = 0;
-    
-    if (tradeData.items && Array.isArray(tradeData.items)) {
-        tradeData.items.forEach(item => {
-            const value = getSkinValue(item.name);
-            if (value) totalValue += value;
-        });
+// Extract user's Kirka ID from profile elements
+function extractMyKirkaId() {
+    // Try to get from profile element
+    const profileElement = document.querySelector('.profile-id, .user-id, [data-user-id]');
+    if (profileElement) {
+        const idMatch = profileElement.textContent.match(/#([A-Z0-9]+)/);
+        if (idMatch) return idMatch[1];
     }
     
-    return totalValue;
+    // Try to get from localStorage
+    const userData = localStorage.getItem('userData');
+    if (userData) {
+        try {
+            const parsed = JSON.parse(userData);
+            if (parsed.id) return parsed.id;
+        } catch (e) {}
+    }
+    
+    return null;
 }
 
-function showTradeDetailsGUI(tradeId) {
-    const tradeData = activeTrades.get(tradeId);
-    if (!tradeData) return;
+// Monitor global chat for trade commands
+function monitorGlobalChat() {
+    if (globalChatObserver) return;
     
-    const gui = document.createElement('div');
-    gui.className = 'trade-details-gui';
-    gui.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: #2b2d31;
-        color: white;
-        padding: 30px;
-        border-radius: 12px;
-        box-shadow: 0 16px 64px rgba(0,0,0,0.5);
-        z-index: 10002;
-        min-width: 600px;
-        max-width: 800px;
-        max-height: 80vh;
-        overflow-y: auto;
-        font-family: "Montserrat", sans-serif;
-        border: 2px solid #667eea;
-    `;
-    
-    const yourValue = calculateTradeValue({ items: tradeData.yourItems || [] });
-    const theirValue = calculateTradeValue({ items: tradeData.theirItems || [] });
-    
-    gui.innerHTML = `
-        <style>
-            .trade-details-gui .trade-header {
-                text-align: center;
-                margin-bottom: 25px;
-                padding-bottom: 15px;
-                border-bottom: 2px solid #667eea;
-            }
-            .trade-details-gui .trade-sides {
-                display: flex;
-                gap: 30px;
-                margin: 20px 0;
-            }
-            .trade-details-gui .trade-side {
-                flex: 1;
-                background: #36393f;
-                padding: 20px;
-                border-radius: 8px;
-                border: 2px solid #40444b;
-            }
-            .trade-details-gui .side-header {
-                text-align: center;
-                font-size: 18px;
-                font-weight: 600;
-                margin-bottom: 15px;
-                padding: 10px;
-                border-radius: 6px;
-            }
-            .trade-details-gui .your-side .side-header {
-                background: #4CAF50;
-            }
-            .trade-details-gui .their-side .side-header {
-                background: #2196F3;
-            }
-            .trade-details-gui .item-list {
-                min-height: 200px;
-                max-height: 300px;
-                overflow-y: auto;
-            }
-            .trade-details-gui .trade-item {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 12px;
-                margin: 8px 0;
-                background: #40444b;
-                border-radius: 6px;
-                border-left: 4px solid #667eea;
-            }
-            .trade-details-gui .item-name {
-                font-weight: 500;
-            }
-            .trade-details-gui .item-value {
-                color: #ffd700;
-                font-weight: 600;
-            }
-            .trade-details-gui .value-summary {
-                background: #36393f;
-                padding: 15px;
-                border-radius: 8px;
-                margin: 20px 0;
-                text-align: center;
-            }
-            .trade-details-gui .action-buttons {
-                display: flex;
-                gap: 15px;
-                margin-top: 25px;
-            }
-            .trade-details-gui button {
-                flex: 1;
-                padding: 12px 20px;
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-                font-size: 14px;
-            }
-            .trade-details-gui .accept-btn {
-                background: #4CAF50;
-                color: white;
-            }
-            .trade-details-gui .accept-btn:hover {
-                background: #45a049;
-                transform: translateY(-1px);
-            }
-            .trade-details-gui .deny-btn {
-                background: #f44336;
-                color: white;
-            }
-            .trade-details-gui .deny-btn:hover {
-                background: #da190b;
-                transform: translateY(-1px);
-            }
-            .trade-details-gui .close-btn {
-                background: #72767d;
-                color: white;
-            }
-            .trade-details-gui .close-btn:hover {
-                background: #5a6069;
-                transform: translateY(-1px);
-            }
-        </style>
-        <div class="trade-header">
-            <h2>🤝 Trade Details</h2>
-            <p>Trading with: <strong>${tradeData.fromUser || 'Unknown'}</strong></p>
-        </div>
-        
-        <div class="trade-sides">
-            <div class="trade-side your-side">
-                <div class="side-header">Your Items</div>
-                <div class="item-list">
-                    ${(tradeData.yourItems || []).map(item => {
-                        const value = getSkinValue(item.name);
-                        return `
-                            <div class="trade-item">
-                                <span class="item-name">${item.name}</span>
-                                <span class="item-value">${value ? value.toLocaleString() : 'N/A'}</span>
-                            </div>
-                        `;
-                    }).join('') || '<p style="text-align: center; color: #72767d; margin: 50px 0;">No items</p>'}
-                </div>
-            </div>
-            
-            <div class="trade-side their-side">
-                <div class="side-header">Their Items</div>
-                <div class="item-list">
-                    ${(tradeData.theirItems || []).map(item => {
-                        const value = getSkinValue(item.name);
-                        return `
-                            <div class="trade-item">
-                                <span class="item-name">${item.name}</span>
-                                <span class="item-value">${value ? value.toLocaleString() : 'N/A'}</span>
-                            </div>
-                        `;
-                    }).join('') || '<p style="text-align: center; color: #72767d; margin: 50px 0;">No items</p>'}
-                </div>
-            </div>
-        </div>
-        
-        <div class="value-summary">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <span>Your Value: <strong style="color: #4CAF50;">${yourValue.toLocaleString()}</strong></span>
-                <span>Their Value: <strong style="color: #2196F3;">${theirValue.toLocaleString()}</strong></span>
-            </div>
-            <div style="font-size: 16px; font-weight: 600;">
-                Difference: <strong style="color: ${yourValue > theirValue ? '#4CAF50' : theirValue > yourValue ? '#f44336' : '#ffd700'}">
-                    ${Math.abs(yourValue - theirValue).toLocaleString()} 
-                    ${yourValue > theirValue ? '(You gain)' : theirValue > yourValue ? '(You lose)' : '(Equal)'}
-                </strong>
-            </div>
-        </div>
-        
-        <div class="action-buttons">
-            <button class="close-btn" onclick="closeTradeDetails()">Close</button>
-            <button class="deny-btn" onclick="denyTrade('${tradeId}'); closeTradeDetails();">❌ Deny Trade</button>
-            <button class="accept-btn" onclick="acceptTrade('${tradeId}'); closeTradeDetails();">✅ Accept Trade</button>
-        </div>
-    `;
-    
-    document.body.appendChild(gui);
-    
-    // Add overlay
-    const overlay = document.createElement('div');
-    overlay.className = 'trade-overlay';
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.7);
-        z-index: 10001;
-    `;
-    overlay.onclick = () => closeTradeDetails();
-    document.body.appendChild(overlay);
-    
-    // Store references for cleanup
-    gui.overlay = overlay;
-}
-
-// Global functions for trade actions
-window.viewTradeDetails = function(tradeId) {
-    // Remove existing notification
-    document.querySelectorAll('.trade-notification').forEach(n => n.remove());
-    showTradeDetailsGUI(tradeId);
-};
-
-window.acceptTrade = function(tradeId) {
-    console.log(`Accepting trade: ${tradeId}`);
-    // Remove notification
-    document.querySelectorAll('.trade-notification').forEach(n => n.remove());
-    activeTrades.delete(tradeId);
-    
-    // Here you would integrate with the actual game's trading API
-    showGameNotification("Trade accepted! ✅", 3000);
-};
-
-window.denyTrade = function(tradeId) {
-    console.log(`Denying trade: ${tradeId}`);
-    // Remove notification
-    document.querySelectorAll('.trade-notification').forEach(n => n.remove());
-    activeTrades.delete(tradeId);
-    
-    // Here you would integrate with the actual game's trading API
-    showGameNotification("Trade denied! ❌", 3000);
-};
-
-window.closeTradeDetails = function() {
-    const gui = document.querySelector('.trade-details-gui');
-    const overlay = document.querySelector('.trade-overlay');
-    if (gui) gui.remove();
-    if (overlay) overlay.remove();
-};
-
-function showGameNotification(message, duration = 5000) {
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 100px;
-        right: 20px;
-        background: rgba(0,0,0,0.9);
-        color: white;
-        padding: 15px 20px;
-        border-radius: 8px;
-        z-index: 10000;
-        font-family: "Montserrat", sans-serif;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-        animation: slideIn 0.3s ease-out;
-    `;
-    notification.textContent = message;
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, duration);
-}
-
-// Monitor for trade requests (this would need to be integrated with the game's actual trade system)
-function initTradeMonitoring() {
-    if (!tradingNotifications) return;
-    
-    // This is a placeholder - you would need to hook into the actual game's trade request system
-    // For demonstration, we'll simulate trade requests
-    console.log("Trade monitoring initialized");
-    
-    // Example: Monitor for specific elements or API calls that indicate trade requests
-    const observer = new MutationObserver((mutations) => {
+    globalChatObserver = new MutationObserver((mutations) => {
         mutations.forEach(mutation => {
-            // Look for trade-related elements being added to the DOM
             if (mutation.addedNodes) {
                 mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === 1 && node.classList) {
-                        // Check for trade-related classes or content
-                        if (node.textContent && node.textContent.includes('wants to trade') || 
-                            node.classList.contains('trade-request') ||
-                            node.querySelector('[data-trade-id]')) {
-                            
-                            // Extract trade data from the element
-                            const tradeData = extractTradeData(node);
-                            if (tradeData) {
-                                showTradeNotification(tradeData);
-                            }
+                    if (node.nodeType === 1) {
+                        // Check for global chat messages
+                        if (node.classList && (
+                            node.classList.contains('chat-message') ||
+                            node.classList.contains('global-chat-message') ||
+                            node.querySelector('.chat-message')
+                        )) {
+                            processGlobalChatMessage(node);
+                        }
+                        
+                        // Check for trade-related UI elements
+                        if (node.textContent && node.textContent.includes('/trade')) {
+                            processTradeElement(node);
                         }
                     }
                 });
@@ -701,28 +353,570 @@ function initTradeMonitoring() {
         });
     });
     
-    observer.observe(document.body, {
+    // Start observing the entire document for changes
+    globalChatObserver.observe(document.body, {
         childList: true,
         subtree: true
     });
 }
 
-function extractTradeData(element) {
-    // This function would extract actual trade data from game elements
-    // For now, return a sample trade for demonstration
-    return {
-        id: Date.now().toString(),
-        fromUser: "TestUser",
-        yourItems: [
-            { name: "AK-47", rarity: "legendary" },
-            { name: "M4A4", rarity: "epic" }
-        ],
-        theirItems: [
-            { name: "AWP", rarity: "mythical" },
-            { name: "Glock-18", rarity: "rare" }
-        ]
-    };
+// Process global chat messages for trade commands
+function processGlobalChatMessage(messageElement) {
+    const messageText = messageElement.textContent || messageElement.innerText || '';
+    
+    // Extract sender information
+    const senderElement = messageElement.querySelector('.sender-name, .username, [class*="name"]');
+    const senderName = senderElement ? senderElement.textContent.trim() : 'Unknown';
+    
+    // Check for trade offer command
+    const offerMatch = messageText.match(tradeCommandRegex);
+    if (offerMatch) {
+        const targetUserId = offerMatch[1];
+        const myItems = offerMatch[2].split(',').map(item => item.trim());
+        const yourItems = offerMatch[3].split(',').map(item => item.trim());
+        
+        // Check if this trade is for us
+        if (!targetUserId || targetUserId === myKirkaId || targetUserId === 'me') {
+            const tradeData = {
+                id: 'trade_' + (tradeIdCounter++),
+                fromUser: senderName,
+                timestamp: Date.now(),
+                myItems: yourItems.map(name => ({ name, rarity: getRarityFromName(name) })),
+                yourItems: myItems.map(name => ({ name, rarity: getRarityFromName(name) })),
+                status: 'pending',
+                originalMessage: messageText
+            };
+            
+            activeTradeOffers.set(tradeData.id, tradeData);
+            
+            if (tradingNotifications) {
+                showKirkaTradeNotification(tradeData);
+            }
+        }
+    }
+    
+    // Check for trade accept command
+    const acceptMatch = messageText.match(tradeAcceptRegex);
+    if (acceptMatch) {
+        const tradeNumber = acceptMatch[1];
+        console.log(`Trade #${tradeNumber} accepted by ${senderName}`);
+    }
 }
+
+// Process trade-related UI elements
+function processTradeElement(element) {
+    // Look for trade windows, confirmations, etc.
+    if (element.classList && (
+        element.classList.contains('trade-window') ||
+        element.classList.contains('trade-confirmation') ||
+        element.querySelector('.trade-items')
+    )) {
+        enhanceTradeWindow(element);
+    }
+}
+
+// Enhance trade windows with value information
+function enhanceTradeWindow(tradeWindow) {
+    if (!showTradeValues || tradeWindow.querySelector('.trade-value-enhanced')) return;
+    
+    const myItemsContainer = tradeWindow.querySelector('.my-items, .your-offer, [class*="my-items"]');
+    const theirItemsContainer = tradeWindow.querySelector('.their-items, .their-offer, [class*="their-items"]');
+    
+    if (myItemsContainer && theirItemsContainer) {
+        const myItems = extractItemsFromContainer(myItemsContainer);
+        const theirItems = extractItemsFromContainer(theirItemsContainer);
+        
+        const myValue = calculateTotalValue(myItems);
+        const theirValue = calculateTotalValue(theirItems);
+        
+        // Add value display
+        const valueDisplay = document.createElement('div');
+        valueDisplay.className = 'trade-value-enhanced';
+        valueDisplay.style.cssText = `
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px;
+            text-align: center;
+            font-family: "Montserrat", sans-serif;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        `;
+        
+        valueDisplay.innerHTML = `
+            <div style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">📊 Trade Values</div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                <span>Your Value:</span>
+                <span style="color: #4CAF50; font-weight: 600;">${myValue.toLocaleString()}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span>Their Value:</span>
+                <span style="color: #2196F3; font-weight: 600;">${theirValue.toLocaleString()}</span>
+            </div>
+            <div style="border-top: 1px solid rgba(255,255,255,0.3); padding-top: 10px;">
+                <span style="font-size: 14px;">Difference: </span>
+                <span style="font-weight: 600; color: ${myValue > theirValue ? '#4CAF50' : theirValue > myValue ? '#f44336' : '#ffd700'}">
+                    ${Math.abs(myValue - theirValue).toLocaleString()} 
+                    ${myValue > theirValue ? '(You gain)' : theirValue > myValue ? '(You lose)' : '(Equal)'}
+                </span>
+            </div>
+        `;
+        
+        tradeWindow.insertBefore(valueDisplay, tradeWindow.firstChild);
+    }
+}
+
+// Extract items from a container element
+function extractItemsFromContainer(container) {
+    const items = [];
+    const itemElements = container.querySelectorAll('.item, .trade-item, [class*="item"]');
+    
+    itemElements.forEach(itemEl => {
+        const itemName = extractItemName(itemEl);
+        if (itemName) {
+            items.push({
+                name: itemName,
+                rarity: getRarityFromElement(itemEl) || getRarityFromName(itemName)
+            });
+        }
+    });
+    
+    return items;
+}
+
+// Get rarity from item name (fallback method)
+function getRarityFromName(itemName) {
+    // Check in BROS data
+    if (tradingPriceData.bros && Array.isArray(tradingPriceData.bros)) {
+        const item = tradingPriceData.bros.find(i => 
+            i['Skin Name'] && i['Skin Name'].toLowerCase() === itemName.toLowerCase()
+        );
+        if (item && item.Rarity) return item.Rarity.toLowerCase();
+    }
+    
+    // Default rarities based on common patterns
+    if (itemName.toLowerCase().includes('gold') || itemName.toLowerCase().includes('dragon')) return 'legendary';
+    if (itemName.toLowerCase().includes('ice') || itemName.toLowerCase().includes('fire')) return 'epic';
+    if (itemName.toLowerCase().includes('wood') || itemName.toLowerCase().includes('basic')) return 'common';
+    
+    return 'rare'; // Default
+}
+
+// Get rarity from element classes or attributes
+function getRarityFromElement(element) {
+    const rarityClasses = ['common', 'rare', 'epic', 'legendary', 'mythical', 'paranormal'];
+    
+    for (const rarity of rarityClasses) {
+        if (element.classList && element.classList.contains(rarity)) return rarity;
+        if (element.className && element.className.includes(rarity)) return rarity;
+        if (element.dataset && element.dataset.rarity === rarity) return rarity;
+    }
+    
+    return null;
+}
+
+// Calculate total value of items
+function calculateTotalValue(items) {
+    let total = 0;
+    
+    items.forEach(item => {
+        const value = getSkinValue(item.name);
+        if (value) total += value;
+    });
+    
+    return total;
+}
+
+// Show Kirka-specific trade notification
+function showKirkaTradeNotification(tradeData) {
+    const notification = document.createElement('div');
+    notification.className = 'kirka-trade-notification';
+    notification.style.cssText = `
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: linear-gradient(135deg, #1a1c20 0%, #2d3436 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        z-index: 10001;
+        min-width: 400px;
+        border: 2px solid #667eea;
+        font-family: "Montserrat", sans-serif;
+        animation: slideInRight 0.3s ease-out;
+    `;
+    
+    const myValue = calculateTotalValue(tradeData.myItems);
+    const theirValue = calculateTotalValue(tradeData.yourItems);
+    
+    notification.innerHTML = `
+        <style>
+            @keyframes slideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            .kirka-trade-notification .trade-header {
+                display: flex;
+                align-items: center;
+                margin-bottom: 15px;
+                font-size: 18px;
+                font-weight: 600;
+                color: #667eea;
+            }
+            .kirka-trade-notification .trade-items {
+                background: rgba(0,0,0,0.3);
+                padding: 10px;
+                border-radius: 8px;
+                margin: 10px 0;
+                max-height: 150px;
+                overflow-y: auto;
+            }
+            .kirka-trade-notification .item-row {
+                display: flex;
+                justify-content: space-between;
+                padding: 5px 0;
+                border-bottom: 1px solid rgba(255,255,255,0.1);
+            }
+            .kirka-trade-notification .value-comparison {
+                background: rgba(102,126,234,0.2);
+                padding: 10px;
+                border-radius: 8px;
+                margin: 10px 0;
+                text-align: center;
+            }
+            .kirka-trade-notification .action-buttons {
+                display: flex;
+                gap: 10px;
+                margin-top: 15px;
+            }
+            .kirka-trade-notification button {
+                flex: 1;
+                padding: 10px;
+                border: none;
+                border-radius: 6px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+                font-family: "Montserrat", sans-serif;
+            }
+            .kirka-trade-notification .accept-btn {
+                background: #4CAF50;
+                color: white;
+            }
+            .kirka-trade-notification .deny-btn {
+                background: #f44336;
+                color: white;
+            }
+            .kirka-trade-notification .inspect-btn {
+                background: #667eea;
+                color: white;
+            }
+        </style>
+        <div class="trade-header">
+            🤝 Trade Offer from ${tradeData.fromUser}
+        </div>
+        
+        <div class="trade-items">
+            <div style="color: #4CAF50; font-weight: 600; margin-bottom: 5px;">They offer:</div>
+            ${tradeData.yourItems.map(item => {
+                const value = getSkinValue(item.name);
+                return `
+                    <div class="item-row">
+                        <span>${item.name}</span>
+                        <span style="color: #ffd700;">${value ? value.toLocaleString() : 'N/A'}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+        
+        <div class="trade-items">
+            <div style="color: #2196F3; font-weight: 600; margin-bottom: 5px;">You give:</div>
+            ${tradeData.myItems.map(item => {
+                const value = getSkinValue(item.name);
+                return `
+                    <div class="item-row">
+                        <span>${item.name}</span>
+                        <span style="color: #ffd700;">${value ? value.toLocaleString() : 'N/A'}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+        
+        <div class="value-comparison">
+            <div style="font-size: 16px; font-weight: 600;">
+                ${theirValue > myValue ? '🎉 Profit: ' : myValue > theirValue ? '⚠️ Loss: ' : '🤝 Equal: '}
+                <span style="color: ${theirValue > myValue ? '#4CAF50' : myValue > theirValue ? '#f44336' : '#ffd700'}">
+                    ${Math.abs(theirValue - myValue).toLocaleString()} credits
+                </span>
+            </div>
+        </div>
+        
+        <div class="action-buttons">
+            <button class="inspect-btn" onclick="copyTradeCommand('${tradeData.id}')">📋 Copy</button>
+            <button class="accept-btn" onclick="acceptKirkaTrade('${tradeData.id}')">✅ Accept</button>
+            <button class="deny-btn" onclick="dismissTradeNotification(this)">❌ Dismiss</button>
+        </div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 60 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.remove();
+        }
+    }, 60000);
+}
+
+// Copy trade accept command to clipboard
+window.copyTradeCommand = function(tradeId) {
+    const tradeData = activeTradeOffers.get(tradeId);
+    if (!tradeData) return;
+    
+    // Extract trade number from original message if available
+    const tradeNumber = Math.floor(Math.random() * 1000); // Placeholder - should extract actual number
+    const acceptCommand = `/trade accept ${tradeNumber}`;
+    
+    navigator.clipboard.writeText(acceptCommand).then(() => {
+        showGameNotification("Trade accept command copied! Paste in global chat.", 3000);
+    });
+};
+
+// Accept a Kirka trade
+window.acceptKirkaTrade = function(tradeId) {
+    const tradeData = activeTradeOffers.get(tradeId);
+    if (!tradeData) return;
+    
+    // This would need to integrate with the actual game's chat system
+    // For now, we'll copy the accept command
+    copyTradeCommand(tradeId);
+    
+    // Remove notification
+    document.querySelectorAll('.kirka-trade-notification').forEach(n => n.remove());
+    activeTradeOffers.delete(tradeId);
+};
+
+// Dismiss trade notification
+window.dismissTradeNotification = function(button) {
+    const notification = button.closest('.kirka-trade-notification');
+    if (notification) notification.remove();
+};
+
+// Monitor WebSocket messages for trade data
+function monitorWebSocketMessages() {
+    // Override WebSocket constructor to intercept messages
+    const originalWebSocket = window.WebSocket;
+    
+    window.WebSocket = function(url, protocols) {
+        console.log('WebSocket connection:', url);
+        
+        const ws = new originalWebSocket(url, protocols);
+        
+        // Check if this is the global chat WebSocket
+        if (url.includes('kirka.io') || url.includes('chat') || url.includes('global')) {
+            globalChatSocket = ws;
+            
+            // Monitor incoming messages
+            ws.addEventListener('message', function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    processWebSocketMessage(data);
+                } catch (e) {
+                    // Not JSON data
+                }
+            });
+        }
+        
+        return ws;
+    };
+    
+    window.WebSocket.prototype = originalWebSocket.prototype;
+}
+
+// Process WebSocket messages
+function processWebSocketMessage(data) {
+    // Check for trade-related messages
+    if (data.type === 'chat' || data.type === 'global_chat' || data.message) {
+        const message = data.message || data.content || data.text;
+        if (message && message.includes('/trade')) {
+            console.log('Trade message detected:', message);
+            
+            // Create a fake element to process the message
+            const fakeElement = document.createElement('div');
+            fakeElement.textContent = message;
+            processGlobalChatMessage(fakeElement);
+        }
+    }
+    
+    // Check for trade notifications
+    if (data.type === 'trade' || data.trade || data.tradeOffer) {
+        console.log('Trade data received:', data);
+        handleIncomingTrade(data);
+    }
+}
+
+// Handle incoming trade data
+function handleIncomingTrade(data) {
+    const tradeData = {
+        id: 'trade_' + (tradeIdCounter++),
+        fromUser: data.from || data.sender || 'Unknown',
+        timestamp: Date.now(),
+        myItems: (data.requested || data.yourItems || []).map(item => ({
+            name: item.name || item,
+            rarity: item.rarity || getRarityFromName(item.name || item)
+        })),
+        yourItems: (data.offered || data.theirItems || []).map(item => ({
+            name: item.name || item,
+            rarity: item.rarity || getRarityFromName(item.name || item)
+        })),
+        status: 'pending',
+        originalData: data
+    };
+    
+    activeTradeOffers.set(tradeData.id, tradeData);
+    
+    if (tradingNotifications) {
+        showKirkaTradeNotification(tradeData);
+    }
+}
+
+// Enhanced inventory pricing for trade values
+function enhanceInventoryWithTradeValues() {
+    if (!inventoryPricing || !showTradeValues) return;
+    
+    const inventoryObserver = new MutationObserver((mutations) => {
+        mutations.forEach(mutation => {
+            if (mutation.addedNodes) {
+                mutation.addedNodes.forEach(node => {
+                    if (node.nodeType === 1) {
+                        // Look for inventory items
+                        const items = node.querySelectorAll && node.querySelectorAll('.inventory-item, .item, [class*="item"]');
+                        if (items) {
+                            items.forEach(item => addTradeValueToItem(item));
+                        }
+                        
+                        // Check if the node itself is an item
+                        if (node.classList && (
+                            node.classList.contains('inventory-item') ||
+                            node.classList.contains('item') ||
+                            node.className.includes('item')
+                        )) {
+                            addTradeValueToItem(node);
+                        }
+                    }
+                });
+            }
+        });
+    });
+    
+    inventoryObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+}
+
+// Add trade value to inventory item
+function addTradeValueToItem(itemElement) {
+    if (!itemElement || itemElement.querySelector('.trade-value-tag')) return;
+    
+    const itemName = extractItemName(itemElement);
+    if (!itemName) return;
+    
+    const yzzzValue = getSkinValue(itemName, 'yzzz');
+    const brosValue = getSkinValue(itemName, 'BROS');
+    const avgValue = getSkinValue(itemName, 'average');
+    
+    if (!avgValue) return;
+    
+    const valueTag = document.createElement('div');
+    valueTag.className = 'trade-value-tag';
+    valueTag.style.cssText = `
+        position: absolute;
+        bottom: 2px;
+        right: 2px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        z-index: 1000;
+        cursor: help;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    `;
+    
+    valueTag.textContent = avgValue.toLocaleString();
+    
+    // Add tooltip with detailed values
+    valueTag.title = `Yzzz: ${yzzzValue ? yzzzValue.toLocaleString() : 'N/A'}\nBROS: ${brosValue ? brosValue.toLocaleString() : 'N/A'}`;
+    
+    itemElement.style.position = 'relative';
+    itemElement.appendChild(valueTag);
+}
+
+// Initialize the trading system when the page loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait a bit for the game to initialize
+    setTimeout(() => {
+        initKirkaTradingSystem();
+        enhanceInventoryWithTradeValues();
+    }, 2000);
+});
+
+// Also initialize when settings are enabled
+const originalTradingNotificationsListener = document.getElementById("tradingNotifications")?.addEventListener;
+if (originalTradingNotificationsListener) {
+    document.getElementById("tradingNotifications").addEventListener('change', (e) => {
+        if (e.target.checked) {
+            initKirkaTradingSystem();
+        }
+    });
+}
+
+const originalInventoryPricingListener = document.getElementById("inventoryPricing")?.addEventListener;
+if (originalInventoryPricingListener) {
+    document.getElementById("inventoryPricing").addEventListener('change', (e) => {
+        if (e.target.checked) {
+            enhanceInventoryWithTradeValues();
+        }
+    });
+}
+
+// Add trade-specific styles
+const tradeStyles = document.createElement('style');
+tradeStyles.textContent = `
+    .kirka-trade-notification::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .kirka-trade-notification::-webkit-scrollbar-track {
+        background: rgba(0,0,0,0.3);
+        border-radius: 3px;
+    }
+    
+    .kirka-trade-notification::-webkit-scrollbar-thumb {
+        background: #667eea;
+        border-radius: 3px;
+    }
+    
+    .trade-value-tag:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(102,126,234,0.5);
+    }
+    
+    .trade-items::-webkit-scrollbar {
+        width: 4px;
+    }
+    
+    .trade-items::-webkit-scrollbar-thumb {
+        background: rgba(255,255,255,0.3);
+        border-radius: 2px;
+    }
+`;
+document.head.appendChild(tradeStyles);
+
+console.log("Kirka.io Trading System loaded successfully!");
 
 // --- Performance Monitor Implementation ---
 let performanceInterval = null;
@@ -917,7 +1111,6 @@ function initQuickActions() {
     
     console.log("Quick Actions initialized:");
     console.log("F2 - Toggle Performance Monitor");
-    console.log("F3 - Simulate Trade Request (Demo)");
     console.log("F5 - Refresh Game");
     console.log("F8 - Copy Current URL");
 }
@@ -933,22 +1126,6 @@ function togglePerformanceMonitor() {
         stopPerformanceMonitor();
         showGameNotification("Performance Monitor OFF", 2000);
     }
-}
-
-function simulateTradeRequest() {
-    const sampleTrade = {
-        id: Date.now().toString(),
-        fromUser: "DemoPlayer",
-        yourItems: [
-            { name: "AK-47 Redline", rarity: "legendary" },
-            { name: "M4A4 Dragon King", rarity: "epic" }
-        ],
-        theirItems: [
-            { name: "AWP Lightning Strike", rarity: "mythical" },
-            { name: "Glock-18 Water Elemental", rarity: "rare" }
-        ]
-    };
-    showTradeNotification(sampleTrade);
 }
 
 function copyGameUrl() {
