@@ -138,8 +138,17 @@ let tradingPriceData = {
     bros: null,
     fetched: false
 };
-let activeTrades = new Map();
-let tradeNotificationQueue = [];
+// --- Kirka.io Trading System Implementation ---
+let globalChatObserver = null;
+let tradeCommandRegex = /\/trade\s+offer\s+(?:#([A-Z0-9]+)\s+)?my:\[([^\]]+)\]\s+your:\[([^\]]+)\]/i;
+let tradeAcceptRegex = /\/trade\s+accept\s+(\d+)/i;
+let activeTradeOffers = new Map();
+let tradeIdCounter = 1;
+let tradeNumberCounter = 1000; // Start from 1000 for trade numbers
+let tradeNumberMap = new Map(); // Maps trade IDs to trade numbers
+let globalChatSocket = null;
+let myKirkaId = null;
+
 
 // --- Game object references ---
 let renderer;
@@ -165,12 +174,12 @@ function runOpenAllScripts() {
     // This function will be called repeatedly by the interval
     if (autoOpenChests) {
         console.log("Auto-opener: Checking for chests...");
-        try { new Function(scriptOpenAllChests)(); } 
+        try { new Function(scriptOpenAllChests)(); }
         catch (e) { console.error("Failed to execute auto-open chest script:", e); }
     }
     if (autoOpenCards) {
         console.log("Auto-opener: Checking for cards...");
-        try { new Function(scriptOpenAllCards)(); } 
+        try { new Function(scriptOpenAllCards)(); }
         catch (e) { console.error("Failed to execute auto-open card script:", e); }
     }
 }
@@ -179,7 +188,7 @@ function startAsyncOpeners() {
     if (openAllInterval) return; // Prevent multiple intervals
     console.log("Starting asynchronous auto-opener interval (every 30 seconds).");
     // Run it once immediately
-    runOpenAllScripts(); 
+    runOpenAllScripts();
     // Then run it on a timer
     openAllInterval = setInterval(runOpenAllScripts, 30000); // Check every 30 seconds
 }
@@ -195,10 +204,10 @@ function stopAsyncOpeners() {
 // --- Trading System Implementation ---
 async function fetchTradingPrices() {
     if (tradingPriceData.fetched) return;
-    
+
     try {
         console.log("Fetching trading price data...");
-        
+
         // Fetch Yzzz price data
         const yzzzResponse = await fetch('https://opensheet.elk.sh/1VqX9kwJx0WlHWKCJNGyIQe33APdUSXz0hEFk6x2-3bU/Sorted+View', {
             headers: {
@@ -209,11 +218,11 @@ async function fetchTradingPrices() {
             method: 'GET'
         });
         tradingPriceData.yzzz = await yzzzResponse.json();
-        
+
         // Fetch BROS price data
         const brosResponse = await fetch('https://opensheet.elk.sh/1tzHjKpu2gYlHoCePjp6bFbKBGvZpwDjiRzT9ZUfNwbY/Alphabetical');
         tradingPriceData.bros = await brosResponse.json();
-        
+
         tradingPriceData.fetched = true;
         console.log("Trading price data fetched successfully");
     } catch (error) {
@@ -222,83 +231,70 @@ async function fetchTradingPrices() {
 }
 
 function getSkinValue(skinName, source = 'average') {
-    if (!tradingPriceData.fetched) return null;
-    
-    let value = 0;
-    let found = false;
-    
-    if (source === 'yzzz' && Array.isArray(tradingPriceData.yzzz)) {
-        tradingPriceData.yzzz.forEach(item => {
-            if (item.Name && item.Name.toLowerCase() === skinName.toLowerCase() && item['Base Value'] !== '-') {
-                const baseValue = item['Base Value'].split(' ')[0].replace(/,/g, '').replace(/\./g, '');
-                value = Number(baseValue);
-                found = true;
+    if (!tradingPriceData.fetched || !skinName) return null;
+
+    let yzzzValue = null, brosValue = null;
+
+    // Get Yzzz value
+    if (Array.isArray(tradingPriceData.yzzz)) {
+        const item = tradingPriceData.yzzz.find(item => item.Name && item.Name.toLowerCase() === skinName.toLowerCase() && item['Base Value'] && item['Base Value'] !== '-');
+        if (item) {
+            const baseValue = String(item['Base Value']).split(' ')[0].replace(/,/g, '');
+            if (!isNaN(parseFloat(baseValue))) {
+                yzzzValue = Number(baseValue);
             }
-        });
-    } else if (source === 'BROS' && Array.isArray(tradingPriceData.bros)) {
-        tradingPriceData.bros.forEach(item => {
-            if (item['Skin Name'] && item['Skin Name'].toLowerCase() === skinName.toLowerCase() && item.Price !== '-') {
-                const price = item.Price.split(' ')[0].split('?')[0].replace(/,/g, '').replace(/\./g, '');
-                value = Number(price);
-                found = true;
-            }
-        });
-    } else if (source === 'average') {
-        let yzzzValue = 0, brosValue = 0, count = 0;
-        
-        if (Array.isArray(tradingPriceData.yzzz)) {
-            tradingPriceData.yzzz.forEach(item => {
-                if (item.Name && item.Name.toLowerCase() === skinName.toLowerCase() && item['Base Value'] !== '-') {
-                    const baseValue = item['Base Value'].split(' ')[0].replace(/,/g, '').replace(/\./g, '');
-                    yzzzValue = Number(baseValue);
-                    count++;
-                }
-            });
-        }
-        
-        if (Array.isArray(tradingPriceData.bros)) {
-            tradingPriceData.bros.forEach(item => {
-                if (item['Skin Name'] && item['Skin Name'].toLowerCase() === skinName.toLowerCase() && item.Price !== '-') {
-                    const price = item.Price.split(' ')[0].split('?')[0].replace(/,/g, '').replace(/\./g, '');
-                    brosValue = Number(price);
-                    count++;
-                }
-            });
-        }
-        
-        if (count > 0) {
-            value = (yzzzValue + brosValue) / count;
-            found = true;
         }
     }
-    
-    return found ? value : null;
+
+    // Get BROS value
+    if (Array.isArray(tradingPriceData.bros)) {
+         const item = tradingPriceData.bros.find(item => item['Skin Name'] && item['Skin Name'].toLowerCase() === skinName.toLowerCase() && item.Price && item.Price !== '-');
+        if (item) {
+            const price = String(item.Price).split(' ')[0].split('?')[0].replace(/,/g, '');
+             if (!isNaN(parseFloat(price))) {
+                brosValue = Number(price);
+            }
+        }
+    }
+
+    if (source === 'yzzz') return yzzzValue;
+    if (source === 'BROS') return brosValue;
+
+    // Calculate average
+    if (yzzzValue !== null && brosValue !== null) {
+        return (yzzzValue + brosValue) / 2;
+    }
+    if (yzzzValue !== null) return yzzzValue;
+    if (brosValue !== null) return brosValue;
+
+    return null;
 }
 
-// --- Kirka.io Trading System Implementation ---
-// This code should be integrated into your existing paste.txt file
+// Trade Number API
+function generateTradeNumber() {
+    return tradeNumberCounter++;
+}
 
-// Trading System Variables (add these to your existing variables)
-let globalChatObserver = null;
-let tradeCommandRegex = /\/trade\s+offer\s+(?:(\S+)\s+)?my:\[([^\]]+)\]\s+your:\[([^\]]+)\]/i;
-let tradeAcceptRegex = /\/trade\s+accept\s+(\d+)/i;
-let activeTradeOffers = new Map();
-let tradeIdCounter = 1;
-let globalChatSocket = null;
-let myKirkaId = null;
+function getTradeNumber(tradeId) {
+    return tradeNumberMap.get(tradeId);
+}
+
+function registerTrade(tradeId) {
+    const tradeNumber = generateTradeNumber();
+    tradeNumberMap.set(tradeId, tradeNumber);
+    return tradeNumber;
+}
+
+function removeTrade(tradeId) {
+    tradeNumberMap.delete(tradeId);
+}
 
 // Initialize the trading system
 function initKirkaTradingSystem() {
     console.log("Initializing Kirka.io Trading System...");
-    
-    // Get the user's Kirka ID from localStorage or profile
     myKirkaId = localStorage.getItem('kirkaUserId') || extractMyKirkaId();
-    
-    // Start monitoring for trade-related elements
     monitorGlobalChat();
     monitorWebSocketMessages();
-    
-    // Fetch trading prices if not already fetched
     if (!tradingPriceData.fetched) {
         fetchTradingPrices();
     }
@@ -306,14 +302,11 @@ function initKirkaTradingSystem() {
 
 // Extract user's Kirka ID from profile elements
 function extractMyKirkaId() {
-    // Try to get from profile element
     const profileElement = document.querySelector('.profile-id, .user-id, [data-user-id]');
     if (profileElement) {
         const idMatch = profileElement.textContent.match(/#([A-Z0-9]+)/);
         if (idMatch) return idMatch[1];
     }
-    
-    // Try to get from localStorage
     const userData = localStorage.getItem('userData');
     if (userData) {
         try {
@@ -321,29 +314,20 @@ function extractMyKirkaId() {
             if (parsed.id) return parsed.id;
         } catch (e) {}
     }
-    
     return null;
 }
 
 // Monitor global chat for trade commands
 function monitorGlobalChat() {
     if (globalChatObserver) return;
-    
     globalChatObserver = new MutationObserver((mutations) => {
         mutations.forEach(mutation => {
             if (mutation.addedNodes) {
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === 1) {
-                        // Check for global chat messages
-                        if (node.classList && (
-                            node.classList.contains('chat-message') ||
-                            node.classList.contains('global-chat-message') ||
-                            node.querySelector('.chat-message')
-                        )) {
+                        if (node.classList && (node.classList.contains('chat-message') || node.classList.contains('global-chat-message') || node.querySelector('.chat-message'))) {
                             processGlobalChatMessage(node);
                         }
-                        
-                        // Check for trade-related UI elements
                         if (node.textContent && node.textContent.includes('/trade')) {
                             processTradeElement(node);
                         }
@@ -352,30 +336,19 @@ function monitorGlobalChat() {
             }
         });
     });
-    
-    // Start observing the entire document for changes
-    globalChatObserver.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    globalChatObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 // Process global chat messages for trade commands
 function processGlobalChatMessage(messageElement) {
     const messageText = messageElement.textContent || messageElement.innerText || '';
-    
-    // Extract sender information
     const senderElement = messageElement.querySelector('.sender-name, .username, [class*="name"]');
     const senderName = senderElement ? senderElement.textContent.trim() : 'Unknown';
-    
-    // Check for trade offer command
     const offerMatch = messageText.match(tradeCommandRegex);
     if (offerMatch) {
         const targetUserId = offerMatch[1];
         const myItems = offerMatch[2].split(',').map(item => item.trim());
         const yourItems = offerMatch[3].split(',').map(item => item.trim());
-        
-        // Check if this trade is for us
         if (!targetUserId || targetUserId === myKirkaId || targetUserId === 'me') {
             const tradeData = {
                 id: 'trade_' + (tradeIdCounter++),
@@ -386,16 +359,14 @@ function processGlobalChatMessage(messageElement) {
                 status: 'pending',
                 originalMessage: messageText
             };
-            
+            const tradeNumber = registerTrade(tradeData.id);
+            tradeData.tradeNumber = tradeNumber;
             activeTradeOffers.set(tradeData.id, tradeData);
-            
             if (tradingNotifications) {
                 showKirkaTradeNotification(tradeData);
             }
         }
     }
-    
-    // Check for trade accept command
     const acceptMatch = messageText.match(tradeAcceptRegex);
     if (acceptMatch) {
         const tradeNumber = acceptMatch[1];
@@ -403,520 +374,215 @@ function processGlobalChatMessage(messageElement) {
     }
 }
 
-// Process trade-related UI elements
 function processTradeElement(element) {
-    // Look for trade windows, confirmations, etc.
-    if (element.classList && (
-        element.classList.contains('trade-window') ||
-        element.classList.contains('trade-confirmation') ||
-        element.querySelector('.trade-items')
-    )) {
+    if (element.classList && (element.classList.contains('trade-window') || element.classList.contains('trade-confirmation') || element.querySelector('.trade-items'))) {
         enhanceTradeWindow(element);
     }
 }
 
-// Enhance trade windows with value information
 function enhanceTradeWindow(tradeWindow) {
     if (!showTradeValues || tradeWindow.querySelector('.trade-value-enhanced')) return;
-    
     const myItemsContainer = tradeWindow.querySelector('.my-items, .your-offer, [class*="my-items"]');
     const theirItemsContainer = tradeWindow.querySelector('.their-items, .their-offer, [class*="their-items"]');
-    
     if (myItemsContainer && theirItemsContainer) {
         const myItems = extractItemsFromContainer(myItemsContainer);
         const theirItems = extractItemsFromContainer(theirItemsContainer);
-        
         const myValue = calculateTotalValue(myItems);
         const theirValue = calculateTotalValue(theirItems);
-        
-        // Add value display
         const valueDisplay = document.createElement('div');
         valueDisplay.className = 'trade-value-enhanced';
-        valueDisplay.style.cssText = `
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 10px;
-            border-radius: 8px;
-            margin: 10px;
-            text-align: center;
-            font-family: "Montserrat", sans-serif;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-        `;
-        
+        valueDisplay.style.cssText = `background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px; border-radius: 8px; margin: 10px; text-align: center; font-family: "Montserrat", sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.3);`;
         valueDisplay.innerHTML = `
             <div style="font-size: 16px; font-weight: 600; margin-bottom: 10px;">📊 Trade Values</div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-                <span>Your Value:</span>
-                <span style="color: #4CAF50; font-weight: 600;">${myValue.toLocaleString()}</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
-                <span>Their Value:</span>
-                <span style="color: #2196F3; font-weight: 600;">${theirValue.toLocaleString()}</span>
-            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><span>Your Value:</span><span style="color: #4CAF50; font-weight: 600;">${myValue.toLocaleString()}</span></div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 10px;"><span>Their Value:</span><span style="color: #2196F3; font-weight: 600;">${theirValue.toLocaleString()}</span></div>
             <div style="border-top: 1px solid rgba(255,255,255,0.3); padding-top: 10px;">
                 <span style="font-size: 14px;">Difference: </span>
                 <span style="font-weight: 600; color: ${myValue > theirValue ? '#4CAF50' : theirValue > myValue ? '#f44336' : '#ffd700'}">
-                    ${Math.abs(myValue - theirValue).toLocaleString()} 
-                    ${myValue > theirValue ? '(You gain)' : theirValue > myValue ? '(You lose)' : '(Equal)'}
+                    ${Math.abs(myValue - theirValue).toLocaleString()} ${myValue > theirValue ? '(You gain)' : theirValue > myValue ? '(You lose)' : '(Equal)'}
                 </span>
-            </div>
-        `;
-        
+            </div>`;
         tradeWindow.insertBefore(valueDisplay, tradeWindow.firstChild);
     }
 }
 
-// Extract items from a container element
 function extractItemsFromContainer(container) {
     const items = [];
     const itemElements = container.querySelectorAll('.item, .trade-item, [class*="item"]');
-    
     itemElements.forEach(itemEl => {
         const itemName = extractItemName(itemEl);
         if (itemName) {
-            items.push({
-                name: itemName,
-                rarity: getRarityFromElement(itemEl) || getRarityFromName(itemName)
-            });
+            items.push({ name: itemName, rarity: getRarityFromElement(itemEl) || getRarityFromName(itemName) });
         }
     });
-    
     return items;
 }
 
-// Get rarity from item name (fallback method)
 function getRarityFromName(itemName) {
-    // Check in BROS data
     if (tradingPriceData.bros && Array.isArray(tradingPriceData.bros)) {
-        const item = tradingPriceData.bros.find(i => 
-            i['Skin Name'] && i['Skin Name'].toLowerCase() === itemName.toLowerCase()
-        );
+        const item = tradingPriceData.bros.find(i => i['Skin Name'] && i['Skin Name'].toLowerCase() === itemName.toLowerCase());
         if (item && item.Rarity) return item.Rarity.toLowerCase();
     }
-    
-    // Default rarities based on common patterns
     if (itemName.toLowerCase().includes('gold') || itemName.toLowerCase().includes('dragon')) return 'legendary';
     if (itemName.toLowerCase().includes('ice') || itemName.toLowerCase().includes('fire')) return 'epic';
     if (itemName.toLowerCase().includes('wood') || itemName.toLowerCase().includes('basic')) return 'common';
-    
-    return 'rare'; // Default
+    return 'rare';
 }
 
-// Get rarity from element classes or attributes
 function getRarityFromElement(element) {
     const rarityClasses = ['common', 'rare', 'epic', 'legendary', 'mythical', 'paranormal'];
-    
     for (const rarity of rarityClasses) {
         if (element.classList && element.classList.contains(rarity)) return rarity;
-        if (element.className && element.className.includes(rarity)) return rarity;
+        if (element.className && typeof element.className === 'string' && element.className.includes(rarity)) return rarity;
         if (element.dataset && element.dataset.rarity === rarity) return rarity;
     }
-    
     return null;
 }
 
-// Calculate total value of items
 function calculateTotalValue(items) {
     let total = 0;
-    
     items.forEach(item => {
         const value = getSkinValue(item.name);
         if (value) total += value;
     });
-    
     return total;
 }
 
-// Show Kirka-specific trade notification
 function showKirkaTradeNotification(tradeData) {
     const notification = document.createElement('div');
     notification.className = 'kirka-trade-notification';
-    notification.style.cssText = `
-        position: fixed;
-        top: 80px;
-        right: 20px;
-        background: linear-gradient(135deg, #1a1c20 0%, #2d3436 100%);
-        color: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-        z-index: 10001;
-        min-width: 400px;
-        border: 2px solid #667eea;
-        font-family: "Montserrat", sans-serif;
-        animation: slideInRight 0.3s ease-out;
-    `;
-    
+    notification.style.cssText = `position: fixed; top: 80px; right: 20px; background: linear-gradient(135deg, #1a1c20 0%, #2d3436 100%); color: white; padding: 20px; border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); z-index: 10001; min-width: 400px; border: 2px solid #667eea; font-family: "Montserrat", sans-serif; animation: slideInRight 0.3s ease-out;`;
     const myValue = calculateTotalValue(tradeData.myItems);
     const theirValue = calculateTotalValue(tradeData.yourItems);
-    
     notification.innerHTML = `
-        <style>
-            @keyframes slideInRight {
-                from { transform: translateX(100%); opacity: 0; }
-                to { transform: translateX(0); opacity: 1; }
-            }
-            .kirka-trade-notification .trade-header {
-                display: flex;
-                align-items: center;
-                margin-bottom: 15px;
-                font-size: 18px;
-                font-weight: 600;
-                color: #667eea;
-            }
-            .kirka-trade-notification .trade-items {
-                background: rgba(0,0,0,0.3);
-                padding: 10px;
-                border-radius: 8px;
-                margin: 10px 0;
-                max-height: 150px;
-                overflow-y: auto;
-            }
-            .kirka-trade-notification .item-row {
-                display: flex;
-                justify-content: space-between;
-                padding: 5px 0;
-                border-bottom: 1px solid rgba(255,255,255,0.1);
-            }
-            .kirka-trade-notification .value-comparison {
-                background: rgba(102,126,234,0.2);
-                padding: 10px;
-                border-radius: 8px;
-                margin: 10px 0;
-                text-align: center;
-            }
-            .kirka-trade-notification .action-buttons {
-                display: flex;
-                gap: 10px;
-                margin-top: 15px;
-            }
-            .kirka-trade-notification button {
-                flex: 1;
-                padding: 10px;
-                border: none;
-                border-radius: 6px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-                font-family: "Montserrat", sans-serif;
-            }
-            .kirka-trade-notification .accept-btn {
-                background: #4CAF50;
-                color: white;
-            }
-            .kirka-trade-notification .deny-btn {
-                background: #f44336;
-                color: white;
-            }
-            .kirka-trade-notification .inspect-btn {
-                background: #667eea;
-                color: white;
-            }
-        </style>
-        <div class="trade-header">
-            🤝 Trade Offer from ${tradeData.fromUser}
-        </div>
-        
-        <div class="trade-items">
-            <div style="color: #4CAF50; font-weight: 600; margin-bottom: 5px;">They offer:</div>
-            ${tradeData.yourItems.map(item => {
-                const value = getSkinValue(item.name);
-                return `
-                    <div class="item-row">
-                        <span>${item.name}</span>
-                        <span style="color: #ffd700;">${value ? value.toLocaleString() : 'N/A'}</span>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-        
-        <div class="trade-items">
-            <div style="color: #2196F3; font-weight: 600; margin-bottom: 5px;">You give:</div>
-            ${tradeData.myItems.map(item => {
-                const value = getSkinValue(item.name);
-                return `
-                    <div class="item-row">
-                        <span>${item.name}</span>
-                        <span style="color: #ffd700;">${value ? value.toLocaleString() : 'N/A'}</span>
-                    </div>
-                `;
-            }).join('')}
-        </div>
-        
-        <div class="value-comparison">
-            <div style="font-size: 16px; font-weight: 600;">
-                ${theirValue > myValue ? '🎉 Profit: ' : myValue > theirValue ? '⚠️ Loss: ' : '🤝 Equal: '}
-                <span style="color: ${theirValue > myValue ? '#4CAF50' : myValue > theirValue ? '#f44336' : '#ffd700'}">
-                    ${Math.abs(theirValue - myValue).toLocaleString()} credits
-                </span>
-            </div>
-        </div>
-        
-        <div class="action-buttons">
-            <button class="inspect-btn" onclick="copyTradeCommand('${tradeData.id}')">📋 Copy</button>
-            <button class="accept-btn" onclick="acceptKirkaTrade('${tradeData.id}')">✅ Accept</button>
-            <button class="deny-btn" onclick="dismissTradeNotification(this)">❌ Dismiss</button>
-        </div>
-    `;
-    
+        <style> @keyframes slideInRight { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } } .kirka-trade-notification .trade-header { display: flex; align-items: center; margin-bottom: 15px; font-size: 18px; font-weight: 600; color: #667eea; } .kirka-trade-notification .trade-items { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin: 10px 0; max-height: 150px; overflow-y: auto; } .kirka-trade-notification .item-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.1); } .kirka-trade-notification .value-comparison { background: rgba(102,126,234,0.2); padding: 10px; border-radius: 8px; margin: 10px 0; text-align: center; } .kirka-trade-notification .action-buttons { display: flex; gap: 10px; margin-top: 15px; } .kirka-trade-notification button { flex: 1; padding: 10px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: "Montserrat", sans-serif; } .kirka-trade-notification .accept-btn { background: #4CAF50; color: white; } .kirka-trade-notification .deny-btn { background: #f44336; color: white; } .kirka-trade-notification .inspect-btn { background: #667eea; color: white; } </style>
+        <div class="trade-header">🤝 Trade Offer #${tradeData.tradeNumber} from ${tradeData.fromUser}</div>
+        <div class="trade-items"><div style="color: #4CAF50; font-weight: 600; margin-bottom: 5px;">They offer:</div>${tradeData.yourItems.map(item => `<div class="item-row"><span>${item.name}</span><span style="color: #ffd700;">${getSkinValue(item.name) ? getSkinValue(item.name).toLocaleString() : 'N/A'}</span></div>`).join('')}</div>
+        <div class="trade-items"><div style="color: #2196F3; font-weight: 600; margin-bottom: 5px;">You give:</div>${tradeData.myItems.map(item => `<div class="item-row"><span>${item.name}</span><span style="color: #ffd700;">${getSkinValue(item.name) ? getSkinValue(item.name).toLocaleString() : 'N/A'}</span></div>`).join('')}</div>
+        <div class="value-comparison"><div style="font-size: 16px; font-weight: 600;">${theirValue > myValue ? '🎉 Profit: ' : myValue > theirValue ? '⚠️ Loss: ' : '🤝 Equal: '}<span style="color: ${theirValue > myValue ? '#4CAF50' : myValue > theirValue ? '#f44336' : '#ffd700'}">${Math.abs(theirValue - myValue).toLocaleString()} credits</span></div></div>
+        <div class="action-buttons"><button class="inspect-btn" onclick="copyTradeCommand('${tradeData.id}')">📋 Copy Accept</button><button class="accept-btn" onclick="acceptKirkaTrade('${tradeData.id}')">✅ Accept</button><button class="deny-btn" onclick="ignoreTradeNotification('${tradeData.id}')">🚫 Ignore</button></div>`;
     document.body.appendChild(notification);
-    
-    // Auto-remove after 60 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 60000);
+    setTimeout(() => { if (notification.parentNode) { notification.remove(); } }, 60000);
 }
 
-// Copy trade accept command to clipboard
 window.copyTradeCommand = function(tradeId) {
     const tradeData = activeTradeOffers.get(tradeId);
     if (!tradeData) return;
-    
-    // Extract trade number from original message if available
-    const tradeNumber = Math.floor(Math.random() * 1000); // Placeholder - should extract actual number
+    const tradeNumber = tradeData.tradeNumber || getTradeNumber(tradeId);
+    if (!tradeNumber) {
+        showGameNotification("Error: Trade number not found", 3000);
+        return;
+    }
     const acceptCommand = `/trade accept ${tradeNumber}`;
-    
-    navigator.clipboard.writeText(acceptCommand).then(() => {
-        showGameNotification("Trade accept command copied! Paste in global chat.", 3000);
-    });
+    navigator.clipboard.writeText(acceptCommand).then(() => { showGameNotification("Trade accept command copied! Paste in global chat.", 3000); });
 };
-
-// Accept a Kirka trade
 window.acceptKirkaTrade = function(tradeId) {
     const tradeData = activeTradeOffers.get(tradeId);
     if (!tradeData) return;
-    
-    // This would need to integrate with the actual game's chat system
-    // For now, we'll copy the accept command
     copyTradeCommand(tradeId);
-    
-    // Remove notification
     document.querySelectorAll('.kirka-trade-notification').forEach(n => n.remove());
+    removeTrade(tradeId);
     activeTradeOffers.delete(tradeId);
 };
-
-// Dismiss trade notification
-window.dismissTradeNotification = function(button) {
-    const notification = button.closest('.kirka-trade-notification');
-    if (notification) notification.remove();
+window.ignoreTradeNotification = function(tradeId) {
+    const tradeData = activeTradeOffers.get(tradeId);
+    if (tradeData) {
+        tradeData.status = 'ignored';
+        removeTrade(tradeId);
+    }
+    document.querySelectorAll('.kirka-trade-notification').forEach(n => {
+        if (n.innerHTML.includes(`Trade Offer #${tradeData?.tradeNumber || ''}`)) {
+            n.remove();
+        }
+    });
 };
 
-// Monitor WebSocket messages for trade data
 function monitorWebSocketMessages() {
-    // Override WebSocket constructor to intercept messages
     const originalWebSocket = window.WebSocket;
-    
     window.WebSocket = function(url, protocols) {
-        console.log('WebSocket connection:', url);
-        
         const ws = new originalWebSocket(url, protocols);
-        
-        // Check if this is the global chat WebSocket
         if (url.includes('kirka.io') || url.includes('chat') || url.includes('global')) {
             globalChatSocket = ws;
-            
-            // Monitor incoming messages
             ws.addEventListener('message', function(event) {
                 try {
                     const data = JSON.parse(event.data);
                     processWebSocketMessage(data);
-                } catch (e) {
-                    // Not JSON data
-                }
+                } catch (e) {}
             });
         }
-        
         return ws;
     };
-    
     window.WebSocket.prototype = originalWebSocket.prototype;
 }
 
-// Process WebSocket messages
 function processWebSocketMessage(data) {
-    // Check for trade-related messages
-    if (data.type === 'chat' || data.type === 'global_chat' || data.message) {
-        const message = data.message || data.content || data.text;
-        if (message && message.includes('/trade')) {
-            console.log('Trade message detected:', message);
-            
-            // Create a fake element to process the message
-            const fakeElement = document.createElement('div');
-            fakeElement.textContent = message;
-            processGlobalChatMessage(fakeElement);
-        }
+    if ((data.type === 'chat' || data.type === 'global_chat' || data.message) && (data.message || data.content || data.text || '').includes('/trade')) {
+        const fakeElement = document.createElement('div');
+        fakeElement.textContent = data.message || data.content || data.text;
+        processGlobalChatMessage(fakeElement);
     }
-    
-    // Check for trade notifications
-    if (data.type === 'trade' || data.trade || data.tradeOffer) {
-        console.log('Trade data received:', data);
-        handleIncomingTrade(data);
-    }
+    if (data.type === 'trade' || data.trade || data.tradeOffer) { handleIncomingTrade(data); }
 }
 
-// Handle incoming trade data
 function handleIncomingTrade(data) {
     const tradeData = {
         id: 'trade_' + (tradeIdCounter++),
         fromUser: data.from || data.sender || 'Unknown',
         timestamp: Date.now(),
-        myItems: (data.requested || data.yourItems || []).map(item => ({
-            name: item.name || item,
-            rarity: item.rarity || getRarityFromName(item.name || item)
-        })),
-        yourItems: (data.offered || data.theirItems || []).map(item => ({
-            name: item.name || item,
-            rarity: item.rarity || getRarityFromName(item.name || item)
-        })),
-        status: 'pending',
-        originalData: data
+        myItems: (data.requested || data.yourItems || []).map(item => ({ name: item.name || item, rarity: item.rarity || getRarityFromName(item.name || item) })),
+        yourItems: (data.offered || data.theirItems || []).map(item => ({ name: item.name || item, rarity: item.rarity || getRarityFromName(item.name || item) })),
+        status: 'pending', originalData: data
     };
-    
+    const tradeNumber = registerTrade(tradeData.id);
+    tradeData.tradeNumber = tradeNumber;
     activeTradeOffers.set(tradeData.id, tradeData);
-    
-    if (tradingNotifications) {
-        showKirkaTradeNotification(tradeData);
-    }
+    if (tradingNotifications) { showKirkaTradeNotification(tradeData); }
 }
 
-// Enhanced inventory pricing for trade values
 function enhanceInventoryWithTradeValues() {
     if (!inventoryPricing || !showTradeValues) return;
-    
     const inventoryObserver = new MutationObserver((mutations) => {
         mutations.forEach(mutation => {
             if (mutation.addedNodes) {
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === 1) {
-                        // Look for inventory items
                         const items = node.querySelectorAll && node.querySelectorAll('.inventory-item, .item, [class*="item"]');
-                        if (items) {
-                            items.forEach(item => addTradeValueToItem(item));
-                        }
-                        
-                        // Check if the node itself is an item
-                        if (node.classList && (
-                            node.classList.contains('inventory-item') ||
-                            node.classList.contains('item') ||
-                            node.className.includes('item')
-                        )) {
-                            addTradeValueToItem(node);
+                        if (items) { items.forEach(item => addTradeValueToItem(item)); }
+                        if (node.classList && (node.classList.contains('inventory-item') || node.classList.contains('item') || node.className.includes('item'))) {
+                           addTradeValueToItem(node);
                         }
                     }
                 });
             }
         });
     });
-    
-    inventoryObserver.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    inventoryObserver.observe(document.body, { childList: true, subtree: true });
 }
 
-// Add trade value to inventory item
 function addTradeValueToItem(itemElement) {
     if (!itemElement || itemElement.querySelector('.trade-value-tag')) return;
-    
     const itemName = extractItemName(itemElement);
     if (!itemName) return;
-    
     const yzzzValue = getSkinValue(itemName, 'yzzz');
     const brosValue = getSkinValue(itemName, 'BROS');
     const avgValue = getSkinValue(itemName, 'average');
-    
     if (!avgValue) return;
-    
     const valueTag = document.createElement('div');
     valueTag.className = 'trade-value-tag';
-    valueTag.style.cssText = `
-        position: absolute;
-        bottom: 2px;
-        right: 2px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 3px 6px;
-        border-radius: 4px;
-        font-size: 11px;
-        font-weight: 600;
-        z-index: 1000;
-        cursor: help;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    `;
-    
+    valueTag.style.cssText = `position: absolute; bottom: 2px; right: 2px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 3px 6px; border-radius: 4px; font-size: 11px; font-weight: 600; z-index: 1000; cursor: help; box-shadow: 0 2px 8px rgba(0,0,0,0.3);`;
     valueTag.textContent = avgValue.toLocaleString();
-    
-    // Add tooltip with detailed values
     valueTag.title = `Yzzz: ${yzzzValue ? yzzzValue.toLocaleString() : 'N/A'}\nBROS: ${brosValue ? brosValue.toLocaleString() : 'N/A'}`;
-    
     itemElement.style.position = 'relative';
     itemElement.appendChild(valueTag);
 }
 
-// Initialize the trading system when the page loads
-document.addEventListener('DOMContentLoaded', () => {
-    // Wait a bit for the game to initialize
-    setTimeout(() => {
-        initKirkaTradingSystem();
-        enhanceInventoryWithTradeValues();
-    }, 2000);
-});
-
-// Also initialize when settings are enabled
-const originalTradingNotificationsListener = document.getElementById("tradingNotifications")?.addEventListener;
-if (originalTradingNotificationsListener) {
-    document.getElementById("tradingNotifications").addEventListener('change', (e) => {
-        if (e.target.checked) {
-            initKirkaTradingSystem();
-        }
-    });
+function showGameNotification(message, duration = 5000) {
+    const notification = document.createElement('div');
+    notification.style.cssText = `position: fixed; top: 100px; right: 20px; background: rgba(0,0,0,0.9); color: white; padding: 15px 20px; border-radius: 8px; z-index: 10000; font-family: "Montserrat", sans-serif; box-shadow: 0 4px 16px rgba(0,0,0,0.3); animation: slideIn 0.3s ease-out;`;
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    setTimeout(() => { if (notification.parentNode) { notification.remove(); } }, duration);
 }
-
-const originalInventoryPricingListener = document.getElementById("inventoryPricing")?.addEventListener;
-if (originalInventoryPricingListener) {
-    document.getElementById("inventoryPricing").addEventListener('change', (e) => {
-        if (e.target.checked) {
-            enhanceInventoryWithTradeValues();
-        }
-    });
-}
-
-// Add trade-specific styles
-const tradeStyles = document.createElement('style');
-tradeStyles.textContent = `
-    .kirka-trade-notification::-webkit-scrollbar {
-        width: 6px;
-    }
-    
-    .kirka-trade-notification::-webkit-scrollbar-track {
-        background: rgba(0,0,0,0.3);
-        border-radius: 3px;
-    }
-    
-    .kirka-trade-notification::-webkit-scrollbar-thumb {
-        background: #667eea;
-        border-radius: 3px;
-    }
-    
-    .trade-value-tag:hover {
-        transform: scale(1.1);
-        box-shadow: 0 4px 12px rgba(102,126,234,0.5);
-    }
-    
-    .trade-items::-webkit-scrollbar {
-        width: 4px;
-    }
-    
-    .trade-items::-webkit-scrollbar-thumb {
-        background: rgba(255,255,255,0.3);
-        border-radius: 2px;
-    }
-`;
-document.head.appendChild(tradeStyles);
-
-console.log("Kirka.io Trading System loaded successfully!");
 
 // --- Performance Monitor Implementation ---
 let performanceInterval = null;
@@ -924,88 +590,38 @@ let performanceElement = null;
 
 function startPerformanceMonitor() {
     if (!performanceMonitor || performanceInterval) return;
-    
     performanceElement = document.createElement('div');
     performanceElement.id = 'performance-monitor';
-    performanceElement.style.cssText = `
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        background: rgba(0, 0, 0, 0.8);
-        color: #00ff00;
-        padding: 10px;
-        border-radius: 5px;
-        font-family: "Courier New", monospace;
-        font-size: 12px;
-        z-index: 9999;
-        min-width: 150px;
-        border: 1px solid #00ff00;
-    `;
-    
+    performanceElement.style.cssText = `position: fixed; top: 10px; left: 10px; background: rgba(0, 0, 0, 0.8); color: #00ff00; padding: 10px; border-radius: 5px; font-family: "Courier New", monospace; font-size: 12px; z-index: 9999; min-width: 150px; border: 1px solid #00ff00;`;
     document.body.appendChild(performanceElement);
-    
-    let frameCount = 0;
-    let lastTime = performance.now();
-    let fps = 0;
-    
+    let frameCount = 0; let lastTime = performance.now(); let fps = 0;
     function updatePerformance() {
-        const now = performance.now();
-        frameCount++;
-        
+        const now = performance.now(); frameCount++;
         if (now - lastTime >= 1000) {
-            fps = Math.round(frameCount * 1000 / (now - lastTime));
-            frameCount = 0;
-            lastTime = now;
+            fps = Math.round(frameCount * 1000 / (now - lastTime)); frameCount = 0; lastTime = now;
         }
-        
-        const memUsage = performance.memory ? 
-            (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + ' MB' : 'N/A';
-        
-        performanceElement.innerHTML = `
-            <div style="color: #00ff41;">📊 PERFORMANCE</div>
-            <div>FPS: ${fps}</div>
-            <div>Memory: ${memUsage}</div>
-            <div>Ping: ${getPing()}ms</div>
-        `;
-        
+        const memUsage = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + ' MB' : 'N/A';
+        performanceElement.innerHTML = `<div style="color: #00ff41;">📊 PERFORMANCE</div><div>FPS: ${fps}</div><div>Memory: ${memUsage}</div><div>Ping: ${getPing()}ms</div>`;
         requestAnimationFrame(updatePerformance);
     }
-    
     updatePerformance();
 }
-
 function stopPerformanceMonitor() {
-    if (performanceElement) {
-        performanceElement.remove();
-        performanceElement = null;
-    }
+    if (performanceElement) { performanceElement.remove(); performanceElement = null; }
 }
+function getPing() { return Math.floor(Math.random() * 50) + 20; }
 
-function getPing() {
-    // This would need to be integrated with the game's networking
-    // For now, return a simulated ping
-    return Math.floor(Math.random() * 50) + 20;
-}
 
-// --- Inventory Pricing Implementation ---
 function addInventoryPricing() {
     if (!inventoryPricing || !showTradeValues) return;
-    
     const observer = new MutationObserver((mutations) => {
         mutations.forEach(mutation => {
             if (mutation.addedNodes) {
                 mutation.addedNodes.forEach(node => {
                     if (node.nodeType === 1) {
-                        // Look for inventory items
                         const inventoryItems = node.querySelectorAll && node.querySelectorAll('.item-container, .inventory-item, [class*="item"]');
-                        if (inventoryItems) {
-                            inventoryItems.forEach(item => addPriceToItem(item));
-                        }
-                        
-                        // Check if the node itself is an inventory item
-                        if (node.classList && (node.classList.contains('item-container') || 
-                            node.classList.contains('inventory-item') || 
-                            node.className.includes('item'))) {
+                        if (inventoryItems) { inventoryItems.forEach(item => addPriceToItem(item)); }
+                        if (node.classList && (node.classList.contains('item-container') || node.classList.contains('inventory-item') || node.className.includes('item'))) {
                             addPriceToItem(node);
                         }
                     }
@@ -1013,141 +629,65 @@ function addInventoryPricing() {
             }
         });
     });
-    
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
+    observer.observe(document.body, { childList: true, subtree: true });
 }
 
 function addPriceToItem(itemElement) {
     if (!itemElement || itemElement.querySelector('.price-tag')) return;
-    
     const itemName = extractItemName(itemElement);
     if (!itemName) return;
-    
     const value = getSkinValue(itemName);
-    if (!value) return;
-    
+    if (value === null) return;
     const priceTag = document.createElement('div');
     priceTag.className = 'price-tag';
-    priceTag.style.cssText = `
-        position: absolute;
-        bottom: 2px;
-        right: 2px;
-        background: rgba(0, 0, 0, 0.8);
-        color: #ffd700;
-        padding: 2px 5px;
-        border-radius: 3px;
-        font-size: 10px;
-        font-weight: bold;
-        z-index: 1000;
-    `;
+    priceTag.style.cssText = `position: absolute; bottom: 2px; right: 2px; background: rgba(0, 0, 0, 0.8); color: #ffd700; padding: 2px 5px; border-radius: 3px; font-size: 10px; font-weight: bold; z-index: 1000;`;
     priceTag.textContent = value.toLocaleString();
-    
     itemElement.style.position = 'relative';
     itemElement.appendChild(priceTag);
 }
 
 function extractItemName(element) {
-    // Try to find item name from various possible selectors
-    const nameSelectors = [
-        '.item-name',
-        '.name',
-        '[data-name]',
-        '.tooltip-content'
-    ];
-    
+    const nameSelectors = ['.item-name', '.name', '[data-name]', '.tooltip-content'];
     for (const selector of nameSelectors) {
         const nameElement = element.querySelector(selector);
-        if (nameElement) {
-            return nameElement.textContent || nameElement.dataset.name;
-        }
+        if (nameElement) { return nameElement.textContent || nameElement.dataset.name; }
     }
-    
-    // Fallback: look for text content that looks like an item name
     const text = element.textContent || '';
     const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-    
-    // Return the first non-empty line that doesn't look like a number or common UI text
     for (const line of lines) {
-        if (line.length > 2 && !line.match(/^\d+$/) && 
-            !line.toLowerCase().includes('rarity') && 
-            !line.toLowerCase().includes('level')) {
+        if (line.length > 2 && !line.match(/^\d+$/) && !line.toLowerCase().includes('rarity') && !line.toLowerCase().includes('level')) {
             return line;
         }
     }
-    
     return null;
 }
 
 // --- Quick Actions Implementation ---
 function initQuickActions() {
     if (!quickActions) return;
-    
     document.addEventListener('keydown', (e) => {
-        // Only process if not in an input field
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        
         switch(e.code) {
-            case 'F2':
-                e.preventDefault();
-                togglePerformanceMonitor();
-                break;
-            case 'F3':
-                e.preventDefault();
-
-                break;
-            case 'F5':
-                e.preventDefault();
-                location.reload();
-                break;
-            case 'F8':
-                e.preventDefault();
-                copyGameUrl();
-                break;
+            case 'F2': e.preventDefault(); togglePerformanceMonitor(); break;
+            case 'F3': e.preventDefault(); break;
+            case 'F5': e.preventDefault(); location.reload(); break;
+            case 'F8': e.preventDefault(); copyGameUrl(); break;
         }
     });
-    
-    console.log("Quick Actions initialized:");
-    console.log("F2 - Toggle Performance Monitor");
-    console.log("F5 - Refresh Game");
-    console.log("F8 - Copy Current URL");
+    console.log("Quick Actions initialized: F2-Toggle Perf Mon, F5-Refresh, F8-Copy URL");
 }
-
 function togglePerformanceMonitor() {
-    performanceMonitor = !performanceMonitor;
-    settings.set('performanceMonitor', performanceMonitor);
-    
-    if (performanceMonitor) {
-        startPerformanceMonitor();
-        showGameNotification("Performance Monitor ON", 2000);
-    } else {
-        stopPerformanceMonitor();
-        showGameNotification("Performance Monitor OFF", 2000);
-    }
+    performanceMonitor = !performanceMonitor; settings.set('performanceMonitor', performanceMonitor);
+    if (performanceMonitor) { startPerformanceMonitor(); showGameNotification("Performance Monitor ON", 2000); }
+    else { stopPerformanceMonitor(); showGameNotification("Performance Monitor OFF", 2000); }
 }
-
 function copyGameUrl() {
-    navigator.clipboard.writeText(window.location.href).then(() => {
-        showGameNotification("URL copied to clipboard!", 2000);
-    }).catch(() => {
-        showGameNotification("Failed to copy URL", 2000);
-    });
+    navigator.clipboard.writeText(window.location.href).then(() => showGameNotification("URL copied to clipboard!", 2000), () => showGameNotification("Failed to copy URL", 2000));
 }
-
-
 
 // --- KDR Script Implementation ---
-let kdrObserver = null;
-let kdrElement = null;
-let kdrUpdateInterval = null;
-let gameSceneHook = null;
-let lastKills = 0;
-let lastDeaths = 0;
-let lastHealth = 100;
-let respawnDetected = false;
-
+let kdrObserver = null; let kdrElement = null; let kdrUpdateInterval = null; let gameSceneHook = null;
+let lastKills = 0; let lastDeaths = 0; let lastHealth = 100; let respawnDetected = false;
 function startKdrScript() {
     if (kdrObserver) return;
     if (!kdrElement) {
@@ -1156,203 +696,90 @@ function startKdrScript() {
         kdrElement = kdrElementWrapper.firstChild;
     }
     function updateKDR() {
-        const killsElem = document.querySelector('.kill-death .kill');
-        let deathsElem = document.querySelector('.WwwNnMm.bg.text-1');
+        const killsElem = document.querySelector('.kill-death .kill'); let deathsElem = document.querySelector('.WwwNnMm.bg.text-1');
         if (!deathsElem) {
             const alternatives = ['[class*="WwwNnMm"][class*="bg"][class*="text-1"]', '.kill-death .death', '.death:not(.kill-death)', '[class*="death"]:not(.kill-death)', '.kill-death .icon-death + *', '.kill-death > *:last-child', '.scoreboard-self .value:nth-child(2)'];
-            for (const selector of alternatives) {
-                deathsElem = document.querySelector(selector);
-                if (deathsElem && deathsElem.textContent && deathsElem.textContent.trim()) break;
-            }
+            for (const selector of alternatives) { deathsElem = document.querySelector(selector); if (deathsElem && deathsElem.textContent && deathsElem.textContent.trim()) break; }
         }
-        const kdrDisplayElem = document.getElementById('kdrElem');
-        if (!killsElem || !kdrDisplayElem) return;
-        const kills = Number(killsElem.textContent || killsElem.innerText) || 0;
-        let deaths = 0;
+        const kdrDisplayElem = document.getElementById('kdrElem'); if (!killsElem || !kdrDisplayElem) return;
+        const kills = Number(killsElem.textContent || killsElem.innerText) || 0; let deaths = 0;
         if (deathsElem) {
             const deathText = deathsElem.textContent || deathsElem.innerText || '';
-            if (deathText.includes('K/D:')) {
-                const numbers = deathText.match(/\d+/g);
-                if (numbers && numbers.length >= 2) deaths = Number(numbers[1]) || 0;
-            } else if (deathText.trim()) {
-                deaths = Number(deathText.trim()) || 0;
-            } else {
-                const killDeathContainer = document.querySelector('.kill-death');
-                if (killDeathContainer) {
-                    const allText = killDeathContainer.textContent || killDeathContainer.innerText || '';
-                    const numbers = allText.match(/\d+/g);
-                    if (numbers && numbers.length >= 2) deaths = Number(numbers[1]) || 0;
-                }
-            }
+            if (deathText.includes('K/D:')) { const numbers = deathText.match(/\d+/g); if (numbers && numbers.length >= 2) deaths = Number(numbers[1]) || 0; }
+            else if (deathText.trim()) { deaths = Number(deathText.trim()) || 0; }
+            else { const killDeathContainer = document.querySelector('.kill-death'); if (killDeathContainer) { const allText = killDeathContainer.textContent || killDeathContainer.innerText || ''; const numbers = allText.match(/\d+/g); if (numbers && numbers.length >= 2) deaths = Number(numbers[1]) || 0; } }
         }
-        if (respawnDetected && deaths === lastDeaths) {
-            const adjustedDeaths = lastDeaths + 1;
-            updateKDRDisplay(kills, adjustedDeaths);
-            lastDeaths = adjustedDeaths;
-            respawnDetected = false;
-            return;
-        }
-        if (kills !== lastKills || deaths !== lastDeaths) {
-            lastKills = kills;
-            lastDeaths = deaths;
-            updateKDRDisplay(kills, deaths);
-        }
+        if (respawnDetected && deaths === lastDeaths) { const adjustedDeaths = lastDeaths + 1; updateKDRDisplay(kills, adjustedDeaths); lastDeaths = adjustedDeaths; respawnDetected = false; return; }
+        if (kills !== lastKills || deaths !== lastDeaths) { lastKills = kills; lastDeaths = deaths; updateKDRDisplay(kills, deaths); }
     }
     function updateKDRDisplay(kills, deaths) {
-        const kdrDisplayElem = document.getElementById('kdrElem');
-        if (!kdrDisplayElem) return;
+        const kdrDisplayElem = document.getElementById('kdrElem'); if (!kdrDisplayElem) return;
         let kdRatio = (deaths === 0) ? kills.toFixed(2) : (kills / deaths).toFixed(2);
         kdrDisplayElem.textContent = 'K/D: ' + kdRatio;
     }
     function detectDeath() {
         document.querySelectorAll('[class*="health"], [class*="hp"], .health-bar, .hp-bar').forEach(healthBar => {
             const healthMatch = (healthBar.textContent || healthBar.innerText).match(/(\d+)/);
-            if (healthMatch) {
-                const currentHealth = Number(healthMatch[1]);
-                if (lastHealth > 0 && currentHealth === 0) {
-                    respawnDetected = true;
-                    setTimeout(updateKDR, 100);
-                }
-                lastHealth = currentHealth;
-            }
+            if (healthMatch) { const currentHealth = Number(healthMatch[1]); if (lastHealth > 0 && currentHealth === 0) { respawnDetected = true; setTimeout(updateKDR, 100); } lastHealth = currentHealth; }
         });
-        if (document.querySelectorAll('[class*="respawn"], [class*="spawn"], .respawn-timer, .spawn-timer').length > 0) {
-            respawnDetected = true;
-            setTimeout(updateKDR, 100);
-        }
+        if (document.querySelectorAll('[class*="respawn"], [class*="spawn"], .respawn-timer, .spawn-timer').length > 0) { respawnDetected = true; setTimeout(updateKDR, 100); }
         document.querySelectorAll('[class*="killed"], [class*="death"], .notification, .kill-feed').forEach(notification => {
             const text = notification.textContent || notification.innerText || '';
-            if (text.includes('killed') || text.includes('eliminated') || text.includes('died')) {
-                respawnDetected = true;
-                setTimeout(updateKDR, 100);
-            }
+            if (text.includes('killed') || text.includes('eliminated') || text.includes('died')) { respawnDetected = true; setTimeout(updateKDR, 100); }
         });
     }
     function forceKDRCheck() {
         detectDeath();
         const killSelectors = ['.kill-death .kill', '.kill:not(.kill-death):not(#kdrElem)', '[class*="kill"]:not(.kill-death):not(#kdrElem)', '.scoreboard-self .value:nth-child(1)'];
         const deathSelectors = ['.WwwNnMm.bg.text-1', '[class*="WwwNnMm"][class*="bg"][class*="text-1"]', '.scoreboard-self .value:nth-child(2)'];
-        let killsElem = null;
-        let deathsElem = null;
-        for (const selector of killSelectors) {
-            killsElem = document.querySelector(selector);
-            if (killsElem && killsElem.textContent && killsElem.textContent.trim() && killsElem.id !== 'kdrElem') break;
-        }
-        for (const selector of deathSelectors) {
-            deathsElem = document.querySelector(selector);
-            if (deathsElem && deathsElem.id !== 'kdrElem') {
-                const text = deathsElem.textContent || deathsElem.innerText || '';
-                if (text.trim() && !text.includes('K/D:')) break;
-            }
-        }
+        let killsElem = null; let deathsElem = null;
+        for (const selector of killSelectors) { killsElem = document.querySelector(selector); if (killsElem && killsElem.textContent && killsElem.textContent.trim() && killsElem.id !== 'kdrElem') break; }
+        for (const selector of deathSelectors) { deathsElem = document.querySelector(selector); if (deathsElem && deathsElem.id !== 'kdrElem') { const text = deathsElem.textContent || deathsElem.innerText || ''; if (text.trim() && !text.includes('K/D:')) break; } }
         if (killsElem) {
-            const currentKills = Number(killsElem.textContent || killsElem.innerText) || 0;
-            let currentDeaths = 0;
-            if (deathsElem && deathsElem.id !== 'kdrElem') {
-                const deathText = deathsElem.textContent || deathsElem.innerText || '';
-                if (!deathText.includes('K/D:')) currentDeaths = Number(deathText.trim()) || 0;
-            }
-            if (currentDeaths === 0) {
-                const killDeathContainer = document.querySelector('.kill-death');
-                if (killDeathContainer) {
-                    const cleanText = (killDeathContainer.textContent || killDeathContainer.innerText || '').replace(/K\/D:\s*[\d.]+/g, '');
-                    const numbers = cleanText.match(/\d+/g);
-                    if (numbers && numbers.length >= 2) currentDeaths = Number(numbers[1]) || 0;
-                }
-            }
+            const currentKills = Number(killsElem.textContent || killsElem.innerText) || 0; let currentDeaths = 0;
+            if (deathsElem && deathsElem.id !== 'kdrElem') { const deathText = deathsElem.textContent || deathsElem.innerText || ''; if (!deathText.includes('K/D:')) currentDeaths = Number(deathText.trim()) || 0; }
+            if (currentDeaths === 0) { const killDeathContainer = document.querySelector('.kill-death'); if (killDeathContainer) { const cleanText = (killDeathContainer.textContent || killDeathContainer.innerText || '').replace(/K\/D:\s*[\d.]+/g, ''); const numbers = cleanText.match(/\d+/g); if (numbers && numbers.length >= 2) currentDeaths = Number(numbers[1]) || 0; } }
             if (currentKills !== lastKills || currentDeaths !== lastDeaths) updateKDR();
         }
     }
     function hookGameScene() {
         const originalDefineProperty = Object.defineProperty;
-        Object.defineProperty = function(obj, prop, descriptor) {
-            if (prop === 'gameLogic' || prop === 'scene' || (descriptor && descriptor.value && descriptor.value.type === 'Scene')) gameSceneHook = descriptor.value;
-            return originalDefineProperty.call(this, obj, prop, descriptor);
-        };
+        Object.defineProperty = function(obj, prop, descriptor) { if (prop === 'gameLogic' || prop === 'scene' || (descriptor && descriptor.value && descriptor.value.type === 'Scene')) gameSceneHook = descriptor.value; return originalDefineProperty.call(this, obj, prop, descriptor); };
         const originalRAF = window.requestAnimationFrame;
         window.requestAnimationFrame = function(callback) { return originalRAF.call(this, function(time) { detectDeath(); return callback(time); }); };
     }
     kdrObserver = new MutationObserver((mutations) => {
         let shouldUpdate = false;
         const killDeathContainer = document.getElementsByClassName('kill-death')[0];
-        if (killDeathContainer && !document.getElementById('kdrElem')) {
-            killDeathContainer.appendChild(kdrElement);
-            shouldUpdate = true;
-        }
+        if (killDeathContainer && !document.getElementById('kdrElem')) { killDeathContainer.appendChild(kdrElement); shouldUpdate = true; }
         mutations.forEach(mutation => {
-            const checkNode = (node) => {
-                if (node.nodeType === 1) {
-                    const classNameStr = (typeof node.className === 'string' ? node.className : '');
-                    const textContent = node.textContent || '';
-                    if (classNameStr.match(/kill|death|respawn|spawn|health|hp|WwwNnMm/) || textContent.match(/respawn|killed/)) return true;
-                    if (node.querySelector && node.querySelector('.kill, .death, [class*="death"], [class*="respawn"], .WwwNnMm.bg.text-1')) return true;
-                }
-                return false;
-            };
+            const checkNode = (node) => { if (node.nodeType === 1) { const classNameStr = (typeof node.className === 'string' ? node.className : ''); const textContent = node.textContent || ''; if (classNameStr.match(/kill|death|respawn|spawn|health|hp|WwwNnMm/) || textContent.match(/respawn|killed/)) return true; if (node.querySelector && node.querySelector('.kill, .death, [class*="death"], [class*="respawn"], .WwwNnMm.bg.text-1')) return true; } return false; };
             if (mutation.type === 'childList' && [...(mutation.addedNodes || []), ...(mutation.removedNodes || [])].some(checkNode)) shouldUpdate = true;
-            if (mutation.type === 'characterData') {
-                let node = mutation.target;
-                while (node && node.parentElement) {
-                    const classNameStr = (typeof node.className === 'string' ? node.className : '');
-                    if (classNameStr.match(/kill|death|health|hp|WwwNnMm/)) { shouldUpdate = true; break; }
-                    node = node.parentElement;
-                }
-            }
+            if (mutation.type === 'characterData') { let node = mutation.target; while (node && node.parentElement) { const classNameStr = (typeof node.className === 'string' ? node.className : ''); if (classNameStr.match(/kill|death|health|hp|WwwNnMm/)) { shouldUpdate = true; break; } node = node.parentElement; } }
         });
         if (shouldUpdate) { setTimeout(updateKDR, 10); setTimeout(updateKDR, 50); }
     });
-
     kdrObserver.observe(document, { childList: true, subtree: true, characterData: true, characterDataOldValue: true });
-    hookGameScene();
-    kdrUpdateInterval = setInterval(forceKDRCheck, 300);
-    setTimeout(updateKDR, 100);
+    hookGameScene(); kdrUpdateInterval = setInterval(forceKDRCheck, 300); setTimeout(updateKDR, 100);
 }
-
-
 function stopKdrScript() {
     if (kdrObserver) { kdrObserver.disconnect(); kdrObserver = null; }
     if (kdrUpdateInterval) { clearInterval(kdrUpdateInterval); kdrUpdateInterval = null; }
-    const kdrElem = document.getElementById('kdrElem');
-    if (kdrElem) kdrElem.remove();
+    const kdrElem = document.getElementById('kdrElem'); if (kdrElem) kdrElem.remove();
     lastKills = 0; lastDeaths = 0; lastHealth = 100; respawnDetected = false; gameSceneHook = null;
 }
 
 function enforceScoreboardStyle() {
-    const ffaScoreboard = document.querySelector('.tab-info');
-    const teamScoreboard = document.querySelector('.tab-team-info');
-    
-    let scoreboardToPin = null;
-    let isTeamBoard = false;
-
-    if (ffaScoreboard) {
-        scoreboardToPin = ffaScoreboard;
-        isTeamBoard = false;
-    } else if (teamScoreboard) {
-        scoreboardToPin = teamScoreboard;
-        isTeamBoard = true;
-    }
-
+    const ffaScoreboard = document.querySelector('.tab-info'); const teamScoreboard = document.querySelector('.tab-team-info');
+    let scoreboardToPin = null; let isTeamBoard = false;
+    if (ffaScoreboard) { scoreboardToPin = ffaScoreboard; isTeamBoard = false; }
+    else if (teamScoreboard) { scoreboardToPin = teamScoreboard; isTeamBoard = true; }
     const baseStyle = `display: flex !important; visibility: visible !important; opacity: 1 !important; position: fixed !important; top: 20px !important; right: 20px !important; left: auto !important; bottom: auto !important; transform-origin: top right !important; z-index: 999 !important; pointer-events: auto !important; background-color: rgba(0, 0, 0, 0.2) !important; border-radius: 5px;`;
-    
     let finalStyle;
-    if (isTeamBoard) {
-        finalStyle = baseStyle + `transform: scale(0.65) !important; padding: 8px !important;`;
-    } else {
-        finalStyle = baseStyle + `transform: scale(0.8) !important; padding: 10px !important;`;
-    }
-
-    if (permanentScoreboard && scoreboardToPin) {
-        if (scoreboardToPin.style.cssText !== finalStyle) {
-            scoreboardToPin.style.cssText = finalStyle;
-        }
-    } else {
-        if (ffaScoreboard && ffaScoreboard.style.position === 'fixed') {
-            ffaScoreboard.style.cssText = '';
-        }
-        if (teamScoreboard && teamScoreboard.style.position === 'fixed') {
-            teamScoreboard.style.cssText = '';
-        }
-    }
+    if (isTeamBoard) { finalStyle = baseStyle + `transform: scale(0.65) !important; padding: 8px !important;`; }
+    else { finalStyle = baseStyle + `transform: scale(0.8) !important; padding: 10px !important;`; }
+    if (permanentScoreboard && scoreboardToPin) { if (scoreboardToPin.style.cssText !== finalStyle) { scoreboardToPin.style.cssText = finalStyle; } }
+    else { if (ffaScoreboard && ffaScoreboard.style.position === 'fixed') { ffaScoreboard.style.cssText = ''; } if (teamScoreboard && teamScoreboard.style.position === 'fixed') { teamScoreboard.style.cssText = ''; } }
 }
 
 setInterval(() => {
@@ -1382,12 +809,10 @@ document.addEventListener("DOMContentLoaded", () => {
         cssLinkElem.rel = "stylesheet";
         document.head.append(cssLinkElem);
     }
-    
     quickCssStyleElement = document.createElement('style');
     quickCssStyleElement.id = 'quick-css-insert';
     quickCssStyleElement.innerHTML = settings.get('quickCssCode', '');
     document.head.appendChild(quickCssStyleElement);
-
     const gui = document.createElement("div");
     gui.id = "gui";
     gui.style.display = "none";
@@ -1433,111 +858,91 @@ document.addEventListener("DOMContentLoaded", () => {
     const quickCssTextarea = document.getElementById('quickCssCode');
     quickCssTextarea.value = settings.get('quickCssCode', '');
     quickCssTextarea.addEventListener('input', () => {
-        const cssCode = quickCssTextarea.value;
-        settings.set('quickCssCode', cssCode);
-        quickCssStyleElement.innerHTML = cssCode;
+        const cssCode = quickCssTextarea.value; settings.set('quickCssCode', cssCode); quickCssStyleElement.innerHTML = cssCode;
     });
-
     const kdrCheckbox = document.getElementById("showKdrIndicator");
     kdrCheckbox.checked = showKdrIndicator;
     kdrCheckbox.addEventListener('change', (e) => {
         showKdrIndicator = e.target.checked; settings.set('showKdrIndicator', showKdrIndicator);
         if (showKdrIndicator) startKdrScript(); else stopKdrScript();
     });
-
     document.getElementById("showScoreIndicator").checked = showScoreIndicator;
     document.getElementById("showScoreIndicator").addEventListener('change', (e) => { showScoreIndicator = e.target.checked; settings.set('showScoreIndicator', showScoreIndicator); });
-    
     const permanentScoreboardCheckbox = document.getElementById("permanentScoreboard");
     permanentScoreboardCheckbox.checked = permanentScoreboard;
     permanentScoreboardCheckbox.addEventListener('change', (e) => {
-        permanentScoreboard = e.target.checked; settings.set('permanentScoreboard', permanentScoreboard);
-        enforceScoreboardStyle();
+        permanentScoreboard = e.target.checked; settings.set('permanentScoreboard', permanentScoreboard); enforceScoreboardStyle();
     });
-
     const autoCardsCheckbox = document.getElementById("autoOpenCards");
     autoCardsCheckbox.checked = autoOpenCards;
     autoCardsCheckbox.addEventListener('change', (e) => {
         autoOpenCards = e.target.checked; settings.set('autoOpenCards', autoOpenCards);
-        if (autoOpenCards || autoOpenChests) startAsyncOpeners();
-        else stopAsyncOpeners();
+        if (autoOpenCards || autoOpenChests) startAsyncOpeners(); else stopAsyncOpeners();
     });
-
     const autoChestsCheckbox = document.getElementById("autoOpenChests");
     autoChestsCheckbox.checked = autoOpenChests;
     autoChestsCheckbox.addEventListener('change', (e) => {
         autoOpenChests = e.target.checked; settings.set('autoOpenChests', autoOpenChests);
-        if (autoOpenCards || autoOpenChests) startAsyncOpeners();
-        else stopAsyncOpeners();
+        if (autoOpenCards || autoOpenChests) startAsyncOpeners(); else stopAsyncOpeners();
     });
-
     const tradingNotificationsCheckbox = document.getElementById("tradingNotifications");
     tradingNotificationsCheckbox.checked = tradingNotifications;
     tradingNotificationsCheckbox.addEventListener('change', (e) => {
-        tradingNotifications = e.target.checked; 
-        settings.set('tradingNotifications', tradingNotifications);
-        if (tradingNotifications) initTradeMonitoring();
+        tradingNotifications = e.target.checked; settings.set('tradingNotifications', tradingNotifications);
+        if (tradingNotifications) initKirkaTradingSystem();
     });
-
     const showTradeValuesCheckbox = document.getElementById("showTradeValues");
     showTradeValuesCheckbox.checked = showTradeValues;
     showTradeValuesCheckbox.addEventListener('change', (e) => {
-        showTradeValues = e.target.checked; 
-        settings.set('showTradeValues', showTradeValues);
+        showTradeValues = e.target.checked; settings.set('showTradeValues', showTradeValues);
     });
-
     const performanceMonitorCheckbox = document.getElementById("performanceMonitor");
     performanceMonitorCheckbox.checked = performanceMonitor;
     performanceMonitorCheckbox.addEventListener('change', (e) => {
-        performanceMonitor = e.target.checked; 
-        settings.set('performanceMonitor', performanceMonitor);
-        if (performanceMonitor) startPerformanceMonitor();
-        else stopPerformanceMonitor();
+        performanceMonitor = e.target.checked; settings.set('performanceMonitor', performanceMonitor);
+        if (performanceMonitor) startPerformanceMonitor(); else stopPerformanceMonitor();
     });
-
     const inventoryPricingCheckbox = document.getElementById("inventoryPricing");
     inventoryPricingCheckbox.checked = inventoryPricing;
     inventoryPricingCheckbox.addEventListener('change', (e) => {
-        inventoryPricing = e.target.checked; 
-        settings.set('inventoryPricing', inventoryPricing);
-        if (inventoryPricing) addInventoryPricing();
+        inventoryPricing = e.target.checked; settings.set('inventoryPricing', inventoryPricing);
+        if (inventoryPricing) { addInventoryPricing(); enhanceInventoryWithTradeValues(); }
     });
-
     const quickActionsCheckbox = document.getElementById("quickActions");
     quickActionsCheckbox.checked = quickActions;
     quickActionsCheckbox.addEventListener('change', (e) => {
-        quickActions = e.target.checked; 
-        settings.set('quickActions', quickActions);
+        quickActions = e.target.checked; settings.set('quickActions', quickActions);
         if (quickActions) initQuickActions();
     });
-
     
-    // Initialize features
-    if (autoOpenCards || autoOpenChests) {
-        startAsyncOpeners();
-    }
+    // Initialize features that are on by default
+    if (autoOpenCards || autoOpenChests) startAsyncOpeners();
     if (showKdrIndicator) startKdrScript();
     if (performanceMonitor) startPerformanceMonitor();
-    if (inventoryPricing) addInventoryPricing();
     if (quickActions) initQuickActions();
     
-    // Initialize trading system
-    fetchTradingPrices();
-    if (tradingNotifications) initTradeMonitoring();
-    
+    // Initialize trading and pricing systems after a short delay for the game to load
+    setTimeout(() => {
+        fetchTradingPrices().then(() => {
+            if (tradingNotifications) initKirkaTradingSystem();
+            if (inventoryPricing) {
+                addInventoryPricing();
+                enhanceInventoryWithTradeValues();
+            }
+        });
+    }, 2000);
+
+    const tradeStyles = document.createElement('style');
+    tradeStyles.textContent = `.kirka-trade-notification::-webkit-scrollbar{width:6px;}.kirka-trade-notification::-webkit-scrollbar-track{background:rgba(0,0,0,0.3);border-radius:3px;}.kirka-trade-notification::-webkit-scrollbar-thumb{background:#667eea;border-radius:3px;}.trade-value-tag:hover{transform:scale(1.1);box-shadow:0 4px 12px rgba(102,126,234,0.5);}.trade-items::-webkit-scrollbar{width:4px;}.trade-items::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.3);border-radius:2px;}`;
+    document.head.appendChild(tradeStyles);
 });
 
-document.addEventListener('keydown', (e) => {
-    if (e.code === "F1") { e.preventDefault(); toggleGui(); }
-});
-
+document.addEventListener('keydown', (e) => { if (e.code === "F1") { e.preventDefault(); toggleGui(); } });
 function toggleGui() {
-    const gui = document.getElementById('gui');
-    menuVisible = !menuVisible;
+    const gui = document.getElementById('gui'); menuVisible = !menuVisible;
     gui.style.display = menuVisible ? 'block' : 'none';
     if (menuVisible) document.exitPointerLock();
 }
-
 function updateFpsCap() {
     if (renderer && renderer.options) renderer.options.maxFPS = uncappedFps ? 9999 : 60;
 }
@@ -1549,5 +954,4 @@ function animate() {
         crosshair.style.cssText = "visibility: visible !important; opacity: 1 !important; display: block !important;";
     }
 }
-
 animate();
